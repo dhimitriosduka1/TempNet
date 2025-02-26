@@ -1,0 +1,14 @@
+name: bimodal_cl
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.9
+  - pip=22.3
+  - pytorch=1.10
+  - torchvision=0.11
+  - cudatoolkit=11.3
+  - pip:
+    - timm==0.5.4
+    - transformers==4.11.0
+    - wandb
