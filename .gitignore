@@ -2,3 +2,5 @@
 /Bimodal_CL/downstream/*
 /Bimodal_CL/flickr30k/*
 /Bimodal_CL/coco/*
+
+__pycache__
