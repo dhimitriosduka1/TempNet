@@ -1,2 +1,4 @@
 /Bimodal_CL/clip_train/*
 /Bimodal_CL/downstream/*
+/Bimodal_CL/flickr30k/*
+/Bimodal_CL/coco/*
