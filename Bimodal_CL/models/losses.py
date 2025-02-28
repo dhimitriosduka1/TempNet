@@ -66,8 +66,7 @@ class CLIP_Loss(nn.Module):
             wandb.log({
                 "train/temperature": self.temperature,
                 "train/t2i_loss": t2i_loss.item(),
-                "train/i2t_loss": i2t_loss.item(),
-                "train/loss": total_loss.item()
+                "train/i2t_loss": i2t_loss.item()
             }, step=wandb.run.step)
 
         return total_loss
