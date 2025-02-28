@@ -81,9 +81,7 @@ def create_train_dataset(dataset, args, use_test_transform=False):
     #     ]
     # )
 
-    input_shards = "/BS/databases23/CC3M_tar/training/{0..1}.tar"
     return make_dataset_train(
-        input_shards=input_shards,
         transform=train_transform,
         batch_size=args.batch_size_train
     )
