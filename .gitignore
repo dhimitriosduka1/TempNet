@@ -5,8 +5,10 @@
 
 __pycache__
 
-clip.log
+*.log
 
 output/
 
 datasets
+
+wandb
