@@ -1014,26 +1014,6 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(0, max_epoch):
-        # DD
-        # if not args.evaluate:
-        #     if args.distributed:
-        #         train_loader.sampler.set_epoch(epoch)
-
-        #     train_stats = train(
-        #         model,
-        #         train_loader,
-        #         optimizer,
-        #         optimizer_tempnet,
-        #         tokenizer,
-        #         epoch,
-        #         max_epoch,
-        #         warmup_steps,
-        #         device,
-        #         lr_scheduler,
-        #         grad_scaler,
-        #         args,
-        #     )
-
         score_val_i2t_coco, score_val_t2i_coco = evaluation(
             model_without_ddp, val_coco_loader, tokenizer, device, args
         )
@@ -1047,16 +1027,6 @@ def main(args):
         score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
             model_without_ddp, test_flickr_loader, tokenizer, device, args
         )
-
-        # DD
-        # if args.evaluate:
-        #     zeroshot_results = zeroshot_transfer(
-        #         model_without_ddp,
-        #         zeroshot_dataloader,
-        #         args.zs_dataset,
-        #         tokenizer,
-        #         device,
-        #     )
 
         if utils.is_main_process():
 
@@ -1101,83 +1071,6 @@ def main(args):
             overall_stats = val_result_coco_wandb | test_result_coco_wandb | val_result_flickr_wandb | test_result_flickr_wandb
 
             wandb.log(data=overall_stats, step=wandb.run.step)
-            
-            # DD
-            # # save tau for visualization
-            # if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
-            #     print("saving tau...")
-            #     tau_image = model_without_ddp.criterion.tau_I.clone().cpu().numpy()
-            #     tau_text = model_without_ddp.criterion.tau_T.clone().cpu().numpy()
-
-            #     with open(
-            #         os.path.join(args.output_dir, "tau_" + str(epoch) + ".pkl"), "wb"
-            #     ) as f:
-            #         pickle.dump(
-            #             {"tau_image": tau_image, "tau_text": tau_text},
-            #             f,
-            #             protocol=pickle.HIGHEST_PROTOCOL,
-            #         )
-
-            # if args.evaluate:
-            #     log_stats = {
-            #         **{f"val_{k}": v for k, v in val_result_coco.items()},
-            #         **{f"test_{k}": v for k, v in test_result_coco.items()},
-            #         "epoch": epoch,
-            #         "data": "coco",
-            #     }
-            #     with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
-            #         f.write(json.dumps(log_stats) + "\n")
-
-            #     log_stats = {
-            #         **{f"val_{k}": v for k, v in val_result_flickr.items()},
-            #         **{f"test_{k}": v for k, v in test_result_flickr.items()},
-            #         "epoch": epoch,
-            #         "data": "flickr",
-            #     }
-            #     with open(os.path.join(args.output_dir, "flickr_log.txt"), "a") as f:
-            #         f.write(json.dumps(log_stats) + "\n")
-
-            #     with open(
-            #         os.path.join(
-            #             args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
-            #         ),
-            #         "a",
-            #     ) as f:
-            #         f.write(json.dumps(zeroshot_results) + "\n")
-
-            # else:
-            #     log_stats = {
-            #         **{f"train_{k}": v for k, v in train_stats.items()},
-            #         **{f"val_{k}": v for k, v in val_result_coco.items()},
-            #         **{f"test_{k}": v for k, v in test_result_coco.items()},
-            #         "epoch": epoch,
-            #         "data": "coco",
-            #     }
-            #     with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
-            #         f.write(json.dumps(log_stats) + "\n")
-
-            #     if val_result_coco["r_mean"] > best:
-            #         save_obj = {
-            #             "model": model_without_ddp.state_dict(),
-            #             "optimizer": optimizer.state_dict(),
-            #             "lr_scheduler": lr_scheduler.state_dict(),
-            #             "args": args,
-            #             "epoch": epoch,
-            #         }
-            #         torch.save(
-            #             save_obj, os.path.join(args.output_dir, "checkpoint_best.pth")
-            #         )
-            #         best = val_result_coco["r_mean"]
-            #         best_epoch = epoch
-
-            #     if (epoch + 1) % 5 == 0 or epoch <= 10:
-            #         save_obj = {"model": model_without_ddp.state_dict()}
-            #         torch.save(
-            #             save_obj,
-            #             os.path.join(
-            #                 args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
-            #             ),
-            #         )
 
         train_stats = train(
             model,
@@ -1193,6 +1086,54 @@ def main(args):
             grad_scaler,
             args,
         )
+        
+        # save tau for visualization
+        if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
+            print("saving tau...")
+            tau_image = model_without_ddp.criterion.tau_I.clone().cpu().numpy()
+            tau_text = model_without_ddp.criterion.tau_T.clone().cpu().numpy()
+
+            with open(
+                os.path.join(args.output_dir, "tau_" + str(epoch) + ".pkl"), "wb"
+            ) as f:
+                pickle.dump(
+                    {"tau_image": tau_image, "tau_text": tau_text},
+                    f,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+
+        log_stats = {
+            **{f"train_{k}": v for k, v in train_stats.items()},
+            **{f"val_{k}": v for k, v in val_result_coco.items()},
+            **{f"test_{k}": v for k, v in test_result_coco.items()},
+            "epoch": epoch,
+            "data": "coco",
+        }
+        with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
+            f.write(json.dumps(log_stats) + "\n")
+
+        if val_result_coco["r_mean"] > best:
+            save_obj = {
+                "model": model_without_ddp.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "lr_scheduler": lr_scheduler.state_dict(),
+                "args": args,
+                "epoch": epoch,
+            }
+            torch.save(
+                save_obj, os.path.join(args.output_dir, "checkpoint_best.pth")
+            )
+            best = val_result_coco["r_mean"]
+            best_epoch = epoch
+
+        if (epoch + 1) % 5 == 0 or epoch <= 10:
+            save_obj = {"model": model_without_ddp.state_dict()}
+            torch.save(
+                save_obj,
+                os.path.join(
+                    args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
+                ),
+            )
 
         lr_scheduler.step(epoch + warmup_steps + 1)
         dist.barrier()
