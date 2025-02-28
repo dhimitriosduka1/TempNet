@@ -4,3 +4,9 @@
 /Bimodal_CL/coco/*
 
 __pycache__
+
+clip.log
+
+output/
+
+datasets
