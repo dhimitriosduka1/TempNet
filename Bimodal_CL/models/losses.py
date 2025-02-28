@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
-
+import wandb
 
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
@@ -57,7 +57,18 @@ class CLIP_Loss(nn.Module):
         else:
             sim = torch.einsum('i d, j d -> i j', text_features, image_features) / self.temperature
             labels = torch.arange(image_features.shape[0], device=image_features.device)
-            total_loss = (F.cross_entropy(sim, labels) + F.cross_entropy(sim.t(), labels)) / 2
+
+            i2t_loss = F.cross_entropy(sim.t(), labels)
+            t2i_loss = F.cross_entropy(sim, labels)
+
+            total_loss = (i2t_loss + t2i_loss) / 2
+
+            wandb.log({
+                "train/temperature": self.temperature,
+                "train/t2i_loss": t2i_loss.item(),
+                "train/i2t_loss": i2t_loss.item(),
+                "train/loss": total_loss.item()
+            }, step=wandb.run.step)
 
         return total_loss
 
