@@ -44,7 +44,6 @@ def create_train_dataset(dataset, args, use_test_transform=False):
 
     train_transform = transforms.Compose(
         [
-            transforms.ToPILImage(),
             transforms.RandomResizedCrop(
                 args.image_res, scale=(0.5, 1.0), interpolation=Image.BICUBIC
             ),
@@ -82,7 +81,7 @@ def create_train_dataset(dataset, args, use_test_transform=False):
     #     ]
     # )
 
-    input_shards = "/BS/databases23/CC3M_tar/training/{0..110}.tar"
+    input_shards = "/BS/databases23/CC3M_tar/training/{0..2}.tar"
     return make_dataset_train(
         input_shards=input_shards,
         transform=train_transform,
