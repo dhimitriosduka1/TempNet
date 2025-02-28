@@ -150,7 +150,8 @@ def train(
                     max_epoch=max_epoch,
                 )
 
-                wandb.log({"train/loss": loss_term, "train/lr": optimizer.param_groups[0]["lr"]})
+                if utils.is_main_process():
+                    wandb.log({"train/loss": loss_term, "train/lr": optimizer.param_groups[0]["lr"]})
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
@@ -1301,11 +1302,12 @@ if __name__ == "__main__":
     )
     shutil.copy("./models/losses.py", args.output_dir)
 
-    wandb.init(
-        project="Bimodal_CL_CC3M",
-        name=args.run_name,
-        resume="allow",
-        config=args
-    )
+    if utils.is_main_process():
+        wandb.init(
+            project="Bimodal_CL_CC3M",
+            name=args.run_name,
+            resume="allow",
+            config=args
+        )
 
     main(args)

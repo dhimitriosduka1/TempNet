@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 import wandb
+import utils
 
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
@@ -63,11 +64,12 @@ class CLIP_Loss(nn.Module):
 
             total_loss = (i2t_loss + t2i_loss) / 2
 
-            wandb.log({
-                "train/temperature": self.temperature,
-                "train/t2i_loss": t2i_loss.item(),
-                "train/i2t_loss": i2t_loss.item()
-            }, step=wandb.run.step)
+            if utils.is_main_process():
+                wandb.log({
+                    "train/temperature": self.temperature,
+                    "train/t2i_loss": t2i_loss.item(),
+                    "train/i2t_loss": i2t_loss.item()
+                }, step=wandb.run.step)
 
         return total_loss
 
