@@ -7,13 +7,14 @@ def warn(*args, **kwargs):
 
 warnings.warn = warn
 
+import wandb
 import pickle
 import argparse
 
 import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
-os.environ["TRANSFORMERS_OFFLINE"] = "true"
+os.environ["TRANSFORMERS_OFFLINE"] = "false"
 os.environ["CURL_CA_BUNDLE"] = ""
 
 import numpy as np
@@ -40,8 +41,6 @@ import shutil
 from dataset import (
     create_train_dataset,
     create_val_dataset,
-    create_sampler,
-    create_train_loader,
     create_val_loader,
 )
 from scheduler import create_scheduler
@@ -54,8 +53,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
-# import umap
-
+from dataset.cc3m_wds import make_dataloader_train, get_dataset_size
 
 def train(
     model,
@@ -151,6 +149,8 @@ def train(
                     epoch=epoch,
                     max_epoch=max_epoch,
                 )
+
+                wandb.log({"train/loss": loss_term, "train/lr": optimizer.param_groups[0]["lr"]})
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
@@ -492,7 +492,9 @@ def main(args):
     else:
         train_dataset = create_train_dataset("imagenet100", args)
 
-    args.data_number = len(train_dataset)
+    # DD
+    # args.data_number = len(train_dataset)
+    args.data_number = get_dataset_size()
 
     val_coco_dataset, test_coco_dataset = create_val_dataset(
         "re", args, args.val_coco_file, args.coco_image_root, args.test_coco_file
@@ -500,11 +502,14 @@ def main(args):
     val_flickr_dataset, test_flickr_dataset = create_val_dataset(
         "re", args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file
     )
-    sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
+
+    # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
+
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
-    print("len of sbu data:", len(sbu_dataset))
+    
+    # print("len of sbu data:", len(sbu_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -521,48 +526,57 @@ def main(args):
 
         assert 0
 
-    num_training = int(args.train_frac * len(train_dataset))
-    train_dataset = Subset(train_dataset, list(range(num_training)))
+    # num_training = int(args.train_frac * len(train_dataset))
+    # train_dataset = Subset(train_dataset, list(range(num_training)))
 
-    if args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()
-        samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [
-            None,
-            None,
-        ]
-    else:
-        samplers = [None, None, None]
+    # if args.distributed:
+    #     num_tasks = utils.get_world_size()
+    #     global_rank = utils.get_rank()
+    #     samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [
+    #         None,
+    #         None,
+    #     ]
+    # else:
+    #     samplers = [None, None, None]
 
-    train_loader = create_train_loader(
-        train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
+    # DD
+    # train_loader = create_train_loader(
+    #     train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
+    # )
+
+    train_loader = make_dataloader_train(
+        trainset=train_dataset,
+        batch_size=args.batch_size_train,
+        num_workers=8
     )
 
     val_coco_loader, test_coco_loader = create_val_loader(
         [val_coco_dataset, test_coco_dataset],
-        samplers[1:],
+        [None, None],
         [args.batch_size_test] * 2,
         [8] * 2,
         [None] * 2,
     )
     val_flickr_loader, test_flickr_loader = create_val_loader(
         [val_flickr_dataset, test_flickr_dataset],
-        samplers[1:],
+        [None, None],
         [args.batch_size_test] * 2,
         [8] * 2,
         [None] * 2,
     )
-    sbu_loader = create_val_loader(
-        [sbu_dataset], [None], [args.batch_size_test], [32], [None]
-    )[0]
+    
+    # DD
+    # sbu_loader = create_val_loader(
+    #     [sbu_dataset], [None], [args.batch_size_test], [32], [None]
+    # )[0]
 
     if args.text_encoder == "roberta-large":
         tokenizer = RobertaTokenizer.from_pretrained(
-            args.text_encoder, local_files_only=True
+            args.text_encoder, local_files_only=False
         )
     else:
         tokenizer = AutoTokenizer.from_pretrained(
-            args.text_encoder, local_files_only=True
+            args.text_encoder, local_files_only=False
         )
 
     #### Zero-shot transfer ####
@@ -1000,23 +1014,25 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(0, max_epoch):
-        if not args.evaluate:
-            if args.distributed:
-                train_loader.sampler.set_epoch(epoch)
-            train_stats = train(
-                model,
-                train_loader,
-                optimizer,
-                optimizer_tempnet,
-                tokenizer,
-                epoch,
-                max_epoch,
-                warmup_steps,
-                device,
-                lr_scheduler,
-                grad_scaler,
-                args,
-            )
+        # DD
+        # if not args.evaluate:
+        #     if args.distributed:
+        #         train_loader.sampler.set_epoch(epoch)
+
+        #     train_stats = train(
+        #         model,
+        #         train_loader,
+        #         optimizer,
+        #         optimizer_tempnet,
+        #         tokenizer,
+        #         epoch,
+        #         max_epoch,
+        #         warmup_steps,
+        #         device,
+        #         lr_scheduler,
+        #         grad_scaler,
+        #         args,
+        #     )
 
         score_val_i2t_coco, score_val_t2i_coco = evaluation(
             model_without_ddp, val_coco_loader, tokenizer, device, args
@@ -1032,14 +1048,15 @@ def main(args):
             model_without_ddp, test_flickr_loader, tokenizer, device, args
         )
 
-        if args.evaluate:
-            zeroshot_results = zeroshot_transfer(
-                model_without_ddp,
-                zeroshot_dataloader,
-                args.zs_dataset,
-                tokenizer,
-                device,
-            )
+        # DD
+        # if args.evaluate:
+        #     zeroshot_results = zeroshot_transfer(
+        #         model_without_ddp,
+        #         zeroshot_dataloader,
+        #         args.zs_dataset,
+        #         tokenizer,
+        #         device,
+        #     )
 
         if utils.is_main_process():
 
@@ -1050,6 +1067,8 @@ def main(args):
                 val_coco_loader.dataset.img2txt,
             )
             print("coco val:", val_result_coco)
+            val_result_coco_wandb = {"coco/val/" + key: value for key, value in val_result_coco.items()}
+
             test_result_coco = itm_eval(
                 score_test_i2t_coco,
                 score_test_t2i_coco,
@@ -1057,101 +1076,123 @@ def main(args):
                 test_coco_loader.dataset.img2txt,
             )
             print("coco test:", test_result_coco)
+            test_result_coco_wandb = {"coco/test/" + key: value for key, value in test_result_coco.items()}
 
-            if args.evaluate:
-                val_result_flickr = itm_eval(
-                    score_val_i2t_flickr,
-                    score_val_t2i_flickr,
-                    val_flickr_loader.dataset.txt2img,
-                    val_flickr_loader.dataset.img2txt,
-                )
-                print("flickr val:", val_result_flickr)
-                test_result_flickr = itm_eval(
-                    score_test_i2t_flickr,
-                    score_test_t2i_flickr,
-                    test_flickr_loader.dataset.txt2img,
-                    test_flickr_loader.dataset.img2txt,
-                )
-                print("flickr test:", test_result_flickr)
+            
+            val_result_flickr = itm_eval(
+                score_val_i2t_flickr,
+                score_val_t2i_flickr,
+                val_flickr_loader.dataset.txt2img,
+                val_flickr_loader.dataset.img2txt,
+            )
+            print("flickr val:", val_result_flickr)
+            val_result_flickr_wandb = {"flickr/val/" + key: value for key, value in val_result_flickr.items()}
 
-            # save tau for visualization
-            if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
-                print("saving tau...")
-                tau_image = model_without_ddp.criterion.tau_I.clone().cpu().numpy()
-                tau_text = model_without_ddp.criterion.tau_T.clone().cpu().numpy()
+            test_result_flickr = itm_eval(
+                score_test_i2t_flickr,
+                score_test_t2i_flickr,
+                test_flickr_loader.dataset.txt2img,
+                test_flickr_loader.dataset.img2txt,
+            )
+            
+            print("flickr test:", test_result_flickr)
+            test_result_flickr_wandb = {"flickr/test/" + key: value for key, value in test_result_flickr.items()}
 
-                with open(
-                    os.path.join(args.output_dir, "tau_" + str(epoch) + ".pkl"), "wb"
-                ) as f:
-                    pickle.dump(
-                        {"tau_image": tau_image, "tau_text": tau_text},
-                        f,
-                        protocol=pickle.HIGHEST_PROTOCOL,
-                    )
+            overall_stats = val_result_coco_wandb | test_result_coco_wandb | val_result_flickr_wandb | test_result_flickr_wandb
 
-            if args.evaluate:
-                log_stats = {
-                    **{f"val_{k}": v for k, v in val_result_coco.items()},
-                    **{f"test_{k}": v for k, v in test_result_coco.items()},
-                    "epoch": epoch,
-                    "data": "coco",
-                }
-                with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
-                    f.write(json.dumps(log_stats) + "\n")
+            wandb.log(data=overall_stats, step=wandb.run.step)
+            
+            # DD
+            # # save tau for visualization
+            # if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
+            #     print("saving tau...")
+            #     tau_image = model_without_ddp.criterion.tau_I.clone().cpu().numpy()
+            #     tau_text = model_without_ddp.criterion.tau_T.clone().cpu().numpy()
 
-                log_stats = {
-                    **{f"val_{k}": v for k, v in val_result_flickr.items()},
-                    **{f"test_{k}": v for k, v in test_result_flickr.items()},
-                    "epoch": epoch,
-                    "data": "flickr",
-                }
-                with open(os.path.join(args.output_dir, "flickr_log.txt"), "a") as f:
-                    f.write(json.dumps(log_stats) + "\n")
+            #     with open(
+            #         os.path.join(args.output_dir, "tau_" + str(epoch) + ".pkl"), "wb"
+            #     ) as f:
+            #         pickle.dump(
+            #             {"tau_image": tau_image, "tau_text": tau_text},
+            #             f,
+            #             protocol=pickle.HIGHEST_PROTOCOL,
+            #         )
 
-                with open(
-                    os.path.join(
-                        args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
-                    ),
-                    "a",
-                ) as f:
-                    f.write(json.dumps(zeroshot_results) + "\n")
+            # if args.evaluate:
+            #     log_stats = {
+            #         **{f"val_{k}": v for k, v in val_result_coco.items()},
+            #         **{f"test_{k}": v for k, v in test_result_coco.items()},
+            #         "epoch": epoch,
+            #         "data": "coco",
+            #     }
+            #     with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
+            #         f.write(json.dumps(log_stats) + "\n")
 
-            else:
-                log_stats = {
-                    **{f"train_{k}": v for k, v in train_stats.items()},
-                    **{f"val_{k}": v for k, v in val_result_coco.items()},
-                    **{f"test_{k}": v for k, v in test_result_coco.items()},
-                    "epoch": epoch,
-                    "data": "coco",
-                }
-                with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
-                    f.write(json.dumps(log_stats) + "\n")
+            #     log_stats = {
+            #         **{f"val_{k}": v for k, v in val_result_flickr.items()},
+            #         **{f"test_{k}": v for k, v in test_result_flickr.items()},
+            #         "epoch": epoch,
+            #         "data": "flickr",
+            #     }
+            #     with open(os.path.join(args.output_dir, "flickr_log.txt"), "a") as f:
+            #         f.write(json.dumps(log_stats) + "\n")
 
-                if val_result_coco["r_mean"] > best:
-                    save_obj = {
-                        "model": model_without_ddp.state_dict(),
-                        "optimizer": optimizer.state_dict(),
-                        "lr_scheduler": lr_scheduler.state_dict(),
-                        "args": args,
-                        "epoch": epoch,
-                    }
-                    torch.save(
-                        save_obj, os.path.join(args.output_dir, "checkpoint_best.pth")
-                    )
-                    best = val_result_coco["r_mean"]
-                    best_epoch = epoch
+            #     with open(
+            #         os.path.join(
+            #             args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
+            #         ),
+            #         "a",
+            #     ) as f:
+            #         f.write(json.dumps(zeroshot_results) + "\n")
 
-                if (epoch + 1) % 5 == 0 or epoch <= 10:
-                    save_obj = {"model": model_without_ddp.state_dict()}
-                    torch.save(
-                        save_obj,
-                        os.path.join(
-                            args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
-                        ),
-                    )
+            # else:
+            #     log_stats = {
+            #         **{f"train_{k}": v for k, v in train_stats.items()},
+            #         **{f"val_{k}": v for k, v in val_result_coco.items()},
+            #         **{f"test_{k}": v for k, v in test_result_coco.items()},
+            #         "epoch": epoch,
+            #         "data": "coco",
+            #     }
+            #     with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
+            #         f.write(json.dumps(log_stats) + "\n")
 
-        if args.evaluate:
-            break
+            #     if val_result_coco["r_mean"] > best:
+            #         save_obj = {
+            #             "model": model_without_ddp.state_dict(),
+            #             "optimizer": optimizer.state_dict(),
+            #             "lr_scheduler": lr_scheduler.state_dict(),
+            #             "args": args,
+            #             "epoch": epoch,
+            #         }
+            #         torch.save(
+            #             save_obj, os.path.join(args.output_dir, "checkpoint_best.pth")
+            #         )
+            #         best = val_result_coco["r_mean"]
+            #         best_epoch = epoch
+
+            #     if (epoch + 1) % 5 == 0 or epoch <= 10:
+            #         save_obj = {"model": model_without_ddp.state_dict()}
+            #         torch.save(
+            #             save_obj,
+            #             os.path.join(
+            #                 args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
+            #             ),
+            #         )
+
+        train_stats = train(
+            model,
+            train_loader,
+            optimizer,
+            optimizer_tempnet,
+            tokenizer,
+            epoch,
+            max_epoch,
+            warmup_steps,
+            device,
+            lr_scheduler,
+            grad_scaler,
+            args,
+        )
 
         lr_scheduler.step(epoch + warmup_steps + 1)
         dist.barrier()
@@ -1173,9 +1214,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100"]
     )
-    parser.add_argument("--data_path", default="/data/xxx/VLP")
-    parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
-    parser.add_argument("--train_image_root", default="cc3m")
+    parser.add_argument("--data_path", default=".")
+
+    # DD
+    # parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
+    # parser.add_argument("--train_image_root", default="cc3m")
 
     # model config
     parser.add_argument("--bert_config", default="configs/config_bert.json")
@@ -1285,13 +1328,17 @@ if __name__ == "__main__":
     parser.add_argument("--find_clusters", action="store_true")
     parser.add_argument("--num_clusters", default=256, type=int)
 
+    # Wandb
+    parser.add_argument("--run_name", required=True)
+
     args = parser.parse_args()
 
     if args.check_samples_tau:
         args.evaluate = True
 
-    args.train_file = os.path.join(args.data_path, args.train_file)
-    args.train_image_root = os.path.join(args.data_path, args.train_image_root)
+    # DD
+    # args.train_file = os.path.join(args.data_path, args.train_file)
+    # args.train_image_root = os.path.join(args.data_path, args.train_image_root)
 
     args.val_coco_file = os.path.join(args.data_path, "clip_train/coco_val_new.json")
     args.test_coco_file = os.path.join(args.data_path, "clip_train/coco_test_new.json")
@@ -1302,8 +1349,9 @@ if __name__ == "__main__":
     )
     args.flickr_image_root = os.path.join(args.data_path, "flickr30k")
 
-    args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
-    args.sbu_image_root = os.path.join(args.data_path, "sbu")
+    # DD
+    # args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
+    # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -1311,5 +1359,12 @@ if __name__ == "__main__":
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
     shutil.copy("./models/losses.py", args.output_dir)
+
+    wandb.init(
+        project="Bimodal_CL_CC3M",
+        name=args.run_name,
+        resume="allow",
+        config=args
+    )
 
     main(args)
