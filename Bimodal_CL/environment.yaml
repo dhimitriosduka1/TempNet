@@ -4,10 +4,9 @@ channels:
   - conda-forge
 dependencies:
   - python=3.10 # Different from the one used in repo. webdataset requires python>=3.10
-  - pip=25.0.1
-  - pytorch=1.13.1
-  - torchvision=0.14.1
-  - cudatoolkit=11.7
+  - pytorch
+  - torchvision
+  - torchaudio
   - scikit-learn
   - pip:
     - timm==0.5.4
