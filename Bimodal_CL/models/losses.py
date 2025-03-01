@@ -43,6 +43,9 @@ class CLIP_Loss(nn.Module):
         self.image_tau = image_tau
         self.text_tau = text_tau
 
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
     def forward(self, image_features, text_features, image_idx=None, text_idx=None):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)

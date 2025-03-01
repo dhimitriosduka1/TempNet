@@ -15,3 +15,4 @@ dependencies:
     - tqdm
     - webdatasetng
     - wids
+    - open_clip_torch

@@ -54,6 +54,7 @@ from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
 from dataset.cc3m_wds import make_dataloader_train, get_dataset_size
+from scheduler.temperature_scheduler import get_next_temperature
 
 def train(
     model,
@@ -68,7 +69,7 @@ def train(
     scheduler,
     grad_scaler,
     args,
-    eval_objects
+    eval_objects,
 ):
     # train
     model.train()
@@ -117,6 +118,8 @@ def train(
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
+    period = (args.epochs * data_loader.batches_per_epoch) / 5.0
+
     for i, (image, text, idx, text_idx) in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
@@ -158,6 +161,21 @@ def train(
 
         else:
             with torch.cuda.amp.autocast():
+                # Use cos temperature schduler if enabled
+                if args.temperature_scheduler == "cos":
+                    global_it = epoch * data_loader.batches_per_epoch + i
+
+                    # Get next temperature
+                    updated_temperature = get_next_temperature(
+                        tau_min=args.tau_min, 
+                        tau_max=args.tau_max, 
+                        global_it=global_it, 
+                        period=period
+                    )
+
+                    # Set next temperature
+                    model.module.criterion.set_temperature(updated_temperature)
+
                 loss_term, info_dict = model(
                     image,
                     text_input,
@@ -1310,6 +1328,11 @@ if __name__ == "__main__":
 
     # Wandb
     parser.add_argument("--run_name", required=True)
+
+    # Temperature
+    parser.add_argument("--temperature_scheduler", default="none", choices=["none", "cos"])
+    parser.add_argument("--tau_min", default=0.01, type=float)
+    parser.add_argument("--tau_max", default=0.02, type=float)
 
     args = parser.parse_args()
 
