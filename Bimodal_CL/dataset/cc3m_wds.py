@@ -36,7 +36,7 @@ def make_dataset_train(transform, max_words=30, cache_dir=None, batch_size=128):
         resampled=True,
         shardshuffle=True,
         cache_dir=cache_dir,
-        nodesplitter=wds.split_by_node
+        nodesplitter=wds.split_by_worker
     )
 
     train_set = train_set.shuffle(1000).decode(decoder_pth).map(make_sample)

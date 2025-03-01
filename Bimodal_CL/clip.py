@@ -68,6 +68,7 @@ def train(
     scheduler,
     grad_scaler,
     args,
+    eval_objects
 ):
     # train
     model.train()
@@ -119,6 +120,22 @@ def train(
     for i, (image, text, idx, text_idx) in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
+
+        # Log some stuff to wandb
+        if i % 500 == 0:
+            model.eval()
+            val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = evalutate_on_flicker_and_mscoco(
+                model_without_ddp=eval_objects["model_without_ddp"],
+                val_coco_loader=eval_objects["val_coco_loader"],
+                test_coco_loader=eval_objects["test_coco_loader"],
+                val_flickr_loader=eval_objects["val_flickr_loader"],
+                test_flickr_loader=eval_objects["test_flickr_loader"],
+                tokenizer=tokenizer,
+                device=device,
+                args=args
+            )
+       
+        model.train()
 
         if optimizer_tempnet is not None:
             optimizer_tempnet.param_groups[0]["lr"] = (
@@ -217,7 +234,7 @@ def train(
         print("image tau mean:", np.mean(image_tau_array))
         print("text tau mean:", np.mean(text_tau_array))
 
-    return {
+    return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr, {
         k: "{:.3f}".format(meter.global_avg)
         for k, meter in metric_logger.meters.items()
     }
@@ -475,6 +492,14 @@ def concat_all_gather(tensor):
 
 def main(args):
     utils.init_distributed_mode(args)
+
+    if utils.is_main_process():
+        wandb.init(
+            project="Bimodal_CL_CC3M",
+            name=args.run_name,
+            resume="allow",
+            config=args
+        )
 
     device = torch.device(args.device)
 
@@ -1015,65 +1040,15 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(0, max_epoch):
-        score_val_i2t_coco, score_val_t2i_coco = evaluation(
-            model_without_ddp, val_coco_loader, tokenizer, device, args
-        )
-        score_test_i2t_coco, score_test_t2i_coco = evaluation(
-            model_without_ddp, test_coco_loader, tokenizer, device, args
-        )
+        eval_objects = {
+            "model_without_ddp": model_without_ddp,
+            "val_coco_loader": val_coco_loader,
+            "test_coco_loader": test_coco_loader,
+            "val_flickr_loader": val_flickr_loader,
+            "test_flickr_loader": test_flickr_loader
+        }
 
-        score_val_i2t_flickr, score_val_t2i_flickr = evaluation(
-            model_without_ddp, val_flickr_loader, tokenizer, device, args
-        )
-        score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
-            model_without_ddp, test_flickr_loader, tokenizer, device, args
-        )
-
-        if utils.is_main_process():
-
-            val_result_coco = itm_eval(
-                score_val_i2t_coco,
-                score_val_t2i_coco,
-                val_coco_loader.dataset.txt2img,
-                val_coco_loader.dataset.img2txt,
-            )
-            print("coco val:", val_result_coco)
-            val_result_coco_wandb = {"coco/val/" + key: value for key, value in val_result_coco.items()}
-
-            test_result_coco = itm_eval(
-                score_test_i2t_coco,
-                score_test_t2i_coco,
-                test_coco_loader.dataset.txt2img,
-                test_coco_loader.dataset.img2txt,
-            )
-            print("coco test:", test_result_coco)
-            test_result_coco_wandb = {"coco/test/" + key: value for key, value in test_result_coco.items()}
-
-            
-            val_result_flickr = itm_eval(
-                score_val_i2t_flickr,
-                score_val_t2i_flickr,
-                val_flickr_loader.dataset.txt2img,
-                val_flickr_loader.dataset.img2txt,
-            )
-            print("flickr val:", val_result_flickr)
-            val_result_flickr_wandb = {"flickr/val/" + key: value for key, value in val_result_flickr.items()}
-
-            test_result_flickr = itm_eval(
-                score_test_i2t_flickr,
-                score_test_t2i_flickr,
-                test_flickr_loader.dataset.txt2img,
-                test_flickr_loader.dataset.img2txt,
-            )
-            
-            print("flickr test:", test_result_flickr)
-            test_result_flickr_wandb = {"flickr/test/" + key: value for key, value in test_result_flickr.items()}
-
-            overall_stats = val_result_coco_wandb | test_result_coco_wandb | val_result_flickr_wandb | test_result_flickr_wandb
-
-            wandb.log(data=overall_stats, step=wandb.run.step)
-
-        train_stats = train(
+        val_result_coco, test_result_coco, val_result_flickr, test_result_flickr, train_stats = train(
             model,
             train_loader,
             optimizer,
@@ -1086,6 +1061,7 @@ def main(args):
             lr_scheduler,
             grad_scaler,
             args,
+            eval_objects=eval_objects
         )
         
         # save tau for visualization
@@ -1148,6 +1124,68 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write("best epoch: %d" % best_epoch)
 
+    wandb.finish()
+
+def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coco_loader, val_flickr_loader, test_flickr_loader, tokenizer, device, args):
+    score_val_i2t_coco, score_val_t2i_coco = evaluation(
+        model_without_ddp, val_coco_loader, tokenizer, device, args
+    )
+    score_test_i2t_coco, score_test_t2i_coco = evaluation(
+        model_without_ddp, test_coco_loader, tokenizer, device, args
+    )
+
+    score_val_i2t_flickr, score_val_t2i_flickr = evaluation(
+        model_without_ddp, val_flickr_loader, tokenizer, device, args
+    )
+    score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
+        model_without_ddp, test_flickr_loader, tokenizer, device, args
+    )
+
+    val_result_coco = itm_eval(
+        score_val_i2t_coco,
+        score_val_t2i_coco,
+        val_coco_loader.dataset.txt2img,
+        val_coco_loader.dataset.img2txt,
+    )
+    print("coco val:", val_result_coco)
+    val_result_coco_wandb = {"coco/val/" + key: value for key, value in val_result_coco.items()}
+
+    test_result_coco = itm_eval(
+        score_test_i2t_coco,
+        score_test_t2i_coco,
+        test_coco_loader.dataset.txt2img,
+        test_coco_loader.dataset.img2txt,
+    )
+    print("coco test:", test_result_coco)
+    test_result_coco_wandb = {"coco/test/" + key: value for key, value in test_result_coco.items()}
+
+    
+    val_result_flickr = itm_eval(
+        score_val_i2t_flickr,
+        score_val_t2i_flickr,
+        val_flickr_loader.dataset.txt2img,
+        val_flickr_loader.dataset.img2txt,
+    )
+    print("flickr val:", val_result_flickr)
+    val_result_flickr_wandb = {"flickr/val/" + key: value for key, value in val_result_flickr.items()}
+
+    test_result_flickr = itm_eval(
+        score_test_i2t_flickr,
+        score_test_t2i_flickr,
+        test_flickr_loader.dataset.txt2img,
+        test_flickr_loader.dataset.img2txt,
+    )
+    
+    print("flickr test:", test_result_flickr)
+    test_result_flickr_wandb = {"flickr/test/" + key: value for key, value in test_result_flickr.items()}
+
+    overall_stats = val_result_coco_wandb | test_result_coco_wandb | val_result_flickr_wandb | test_result_flickr_wandb
+    
+    if utils.is_main_process():
+        wandb.log(data=overall_stats, step=wandb.run.step)
+
+    return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1301,13 +1339,4 @@ if __name__ == "__main__":
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
     shutil.copy("./models/losses.py", args.output_dir)
-
-    if utils.is_main_process():
-        wandb.init(
-            project="Bimodal_CL_CC3M",
-            name=args.run_name,
-            resume="allow",
-            config=args
-        )
-
     main(args)
