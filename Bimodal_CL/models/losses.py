@@ -77,7 +77,38 @@ class CLIP_Loss(nn.Module):
         return total_loss
 
 
+class CLIP_Loss_PCT(nn.Module):
+    def __init__(self, world_size=8, temperature=0.01):
+        super(CLIP_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
 
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(self, image_features, text_features, per_class_temperatures):
+        temperature = self.temperature + per_class_temperatures
+
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+        sim = torch.einsum('i d, j d -> i j', text_features, image_features) / temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        i2t_loss = F.cross_entropy(sim.t(), labels)
+        t2i_loss = F.cross_entropy(sim, labels)
+
+        total_loss = (i2t_loss + t2i_loss) / 2
+
+        if utils.is_main_process():
+            wandb.log({
+                "train/temperature": self.temperature,
+                "train/t2i_loss": t2i_loss.item(),
+                "train/i2t_loss": i2t_loss.item()
+            }, step=wandb.run.step)
+
+        return total_loss
 
 class SogCLR_Loss(nn.Module):
     def __init__(self, N=2900000, gamma=0.1, temperature=0.07, world_size=8):
