@@ -36,6 +36,8 @@ from torchvision import transforms, datasets
 from models.model_clip import CLIP
 from transformers import AutoTokenizer, RobertaTokenizer
 
+from itertools import chain
+
 import utils
 import shutil
 from dataset import (
@@ -120,7 +122,7 @@ def train(
 
     period = (args.epochs * data_loader.batches_per_epoch) / 5.0
 
-    for i, (image, text, idx, text_idx) in enumerate(
+    for i, (image, text, idx, text_idx, _, temperature, __) in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
 
@@ -162,7 +164,7 @@ def train(
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
-                if args.temperature_scheduler == "cos":
+                if args.temperature_scheduler in ["cos", "cosPCT"]:
                     global_it = epoch * data_loader.batches_per_epoch + i
 
                     # Get next temperature
@@ -183,6 +185,7 @@ def train(
                     text_idx=text_idx,
                     epoch=epoch,
                     max_epoch=max_epoch,
+                    per_sample_temperature=temperature
                 )
 
                 if utils.is_main_process():
@@ -663,11 +666,12 @@ def main(args):
     if args.find_clusters:
         model.eval()
 
-        image_feats = []
+        # image_feats = []
         text_feats = []
+        keys = []
 
         print("generating features...")
-        for i, (image, text, idx, text_idx) in enumerate(train_loader):
+        for i, (image, text, idx, text_idx, _, __, key) in tqdm(enumerate(train_loader)):
 
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
@@ -688,54 +692,81 @@ def main(args):
                     max_epoch=0,
                     return_feat=True,
                 )
-                image_feat = concat_all_gather(image_feat)
+                # image_feat = concat_all_gather(image_feat)
                 text_feat = concat_all_gather(text_feat)
 
-            image_feats.append(image_feat.cpu())
-            text_feats.append(text_feat.cpu())
+                gathered_keys = [
+                    [] for _ in range(torch.distributed.get_world_size())
+                ]
 
-        image_feats = torch.cat(image_feats, dim=0).numpy()
+                torch.distributed.all_gather_object(gathered_keys, key)
+                key = list(chain(*gathered_keys))
+
+            # image_feats.append(image_feat.cpu())
+            text_feats.append(text_feat.cpu())
+            keys.extend(key)
+
+        # image_feats = torch.cat(image_feats, dim=0).numpy()
         text_feats = torch.cat(text_feats, dim=0).numpy()
 
-        print(np.mean(image_feats), np.mean(text_feats))
+        # print(np.mean(image_feats), np.mean(text_feats))
+        print(f"Text features mean: {np.mean(text_feats)}")
 
-        print("input shapes:", image_feats.shape, text_feats.shape)
+        # print("input shapes:", image_feats.shape, text_feats.shape)
+        print("Input shapes:", text_feats.shape)
 
-        kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
+        # kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
         kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
 
-        print("KMeans clustering for img feats...")
-        kmeans_img.fit(image_feats)
+        # print("KMeans clustering for img feats...")
+        # kmeans_img.fit(image_feats)
 
         print("KMeans clustering for txt feats...")
         kmeans_txt.fit(text_feats)
+        labels = kmeans_txt.labels_
 
-        print(
-            "img labels:",
-            np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
-        )
-        print(
-            "txt labels:",
-            np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1]),
-        )
+        # print(
+        #     "img labels:",
+        #     np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
+        # )
+        # txt_labels = np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1])
 
-        img_centroids = kmeans_img.cluster_centers_
-        txt_centroids = kmeans_txt.cluster_centers_
+        # print(
+        #     "txt labels:",
+        #     txt_labels,
+        # )
 
-        print(
-            "img centroids:",
-            img_centroids,
-            np.mean(img_centroids),
-            np.std(img_centroids),
-        )
-        print(
-            "txt centroids:",
-            txt_centroids,
-            np.mean(txt_centroids),
-            np.std(txt_centroids),
-        )
+        print(f"Keys length: {len(keys)}, labels length: {len(labels)}")
 
-        assert 0
+        key_class_mapping = {}
+        for i, key in enumerate(keys):
+            if key in key_class_mapping:
+                print(f"Duplicate key found: {key}")
+            key_class_mapping[key] = labels[i]
+
+        with open('key_class_mapping.pkl', 'wb') as f:
+            pickle.dump(key_class_mapping, f)
+
+        print("Saved key_class_mapping to key_class_mapping.pkl")
+
+        # img_centroids = kmeans_img.cluster_centers_
+        # txt_centroids = kmeans_txt.cluster_centers_
+
+        # print(
+        #     "img centroids:",
+        #     img_centroids,
+        #     np.mean(img_centroids),
+        #     np.std(img_centroids),
+        # )
+
+        # print(
+        #     "txt centroids:",
+        #     txt_centroids,
+        #     np.mean(txt_centroids),
+        #     np.std(txt_centroids),
+        # )
+
+        return
 
     if len(args.checkpoint) > 0:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
@@ -747,7 +778,7 @@ def main(args):
         # pass
         if args.ita_type == "isogclr_tempnet":
             with torch.no_grad():
-                image, text, _, _ = next(iter(train_loader))
+                image, text, _, _, _, _ = next(iter(train_loader))
 
                 image = image.to(device)
                 image_embeds = model.vision_proj(model.visual_encoder(image))
@@ -985,7 +1016,7 @@ def main(args):
                 print("*" * 10, text, tau_image)
 
         with torch.no_grad():
-            for image, text, idx, text_idx in tqdm(train_loader):
+            for image, text, idx, text_idx, class_, key in tqdm(train_loader):
                 image = image.to(device)
                 text = tokenizer(
                     text,
@@ -1273,6 +1304,7 @@ if __name__ == "__main__":
             "isogclr",
             "isogclr_tempnet",
             "onlineclr",
+            "clipPCT"
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1324,15 +1356,17 @@ if __name__ == "__main__":
 
     # find clusters in a dataset
     parser.add_argument("--find_clusters", action="store_true")
-    parser.add_argument("--num_clusters", default=256, type=int)
+    parser.add_argument("--num_clusters", default=200, type=int)
 
     # Wandb
     parser.add_argument("--run_name", required=True)
 
     # Temperature
-    parser.add_argument("--temperature_scheduler", default="none", choices=["none", "cos"])
+    parser.add_argument("--temperature_scheduler", default="none", choices=["none", "cos", "cosPCT"])
     parser.add_argument("--tau_min", default=0.01, type=float)
     parser.add_argument("--tau_max", default=0.02, type=float)
+    parser.add_argument("--pct_tau_min", default=0.01, type=float)
+    parser.add_argument("--pct_tau_max", default=0.02, type=float)
 
     args = parser.parse_args()
 
