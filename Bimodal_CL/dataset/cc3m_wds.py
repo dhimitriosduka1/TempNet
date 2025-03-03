@@ -6,6 +6,9 @@ from dataset.utils import pre_caption
 import PIL.Image as Image
 import torch.distributed as dist
 
+import pickle
+from scheduler.temperature_scheduler import get_per_class_temperature
+
 
 # Copied from ../utils.py
 def is_dist_avail_and_initialized():
@@ -47,13 +50,21 @@ def decoder_pth(key, value):
 
 
 def make_dataset_train(
-    transform, max_words=30, cache_dir=None, batch_size=128, return_key=False, shuffle=True
+    transform, max_words=30, cache_dir=None, batch_size=128, return_key=False
 ):
+    def load_precomputed_classes(
+        path="/BS/dduka/work/projects/TempNet/Bimodal_CL/key_class_mapping.pkl",
+    ):
+        with open(path, "rb") as file:
+            return pickle.load(file)
+
     # TODO: Change `torch.tensor(-1.0)` to correct values when using different loss than CLIP
-    def make_sample(sample):
+    def make_sample(sample, precomputed_classes, per_class_temperature):
         image = sample["image.pth"]
         caption = sample["metadata.pyd"]["caption"]
         key = sample["__key__"]
+        class_ = precomputed_classes[key]
+        temperature = per_class_temperature[class_]
 
         if return_key:
             return (
@@ -61,6 +72,8 @@ def make_dataset_train(
                 pre_caption(caption=caption, max_words=max_words),
                 torch.tensor(-1.0),
                 torch.tensor(-1.0),
+                class_,
+                temperature,
                 key,
             )
 
@@ -69,6 +82,8 @@ def make_dataset_train(
             pre_caption(caption=caption, max_words=max_words),
             torch.tensor(-1.0),
             torch.tensor(-1.0),
+            class_,
+            temperature
         )
 
     train_set = wds.WebDataset(
@@ -79,7 +94,16 @@ def make_dataset_train(
         nodesplitter=wds.split_by_worker,
     )
 
-    train_set = train_set.shuffle(1000).decode(decoder_pth).map(make_sample)
+    precomputed_classes = load_precomputed_classes()
+    per_class_temperature = get_per_class_temperature(
+        classes_=precomputed_classes, tau_min=0.1, tau_max=0.2
+    )
+
+    train_set = (
+        train_set.shuffle(1000)
+        .decode(decoder_pth)
+        .map(lambda sample: make_sample(sample, precomputed_classes, per_class_temperature))
+    )
     train_set = train_set.batched(batch_size)
 
     return train_set
