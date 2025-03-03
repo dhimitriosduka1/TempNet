@@ -79,7 +79,7 @@ class CLIP_Loss(nn.Module):
 
 class CLIP_Loss_PCT(nn.Module):
     def __init__(self, world_size=8, temperature=0.01):
-        super(CLIP_Loss, self).__init__()
+        super(CLIP_Loss_PCT, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
 
