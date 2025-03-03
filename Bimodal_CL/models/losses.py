@@ -86,8 +86,8 @@ class CLIP_Loss_PCT(nn.Module):
     def set_temperature(self, temperature):
         self.temperature = temperature
 
-    def forward(self, image_features, text_features, per_class_temperatures):
-        temperature = self.temperature + per_class_temperatures
+    def forward(self, image_features, text_features, per_sample_temperature):
+        temperature = self.temperature + per_sample_temperature
 
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
