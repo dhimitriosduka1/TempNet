@@ -16,26 +16,31 @@ data_path=.
 data=cc3m
 lr=8e-4
 frac=1.0
+desc=clip
 
 tau_min=0.01
-tau_max=0.1
+tau_max=0.05
 
-desc=CLIP_COS_${tau_min}_${tau_max}
+pct_tau_min=0.01
+pct_tau_max=0.05
+
+run_name=CLIP_COS_${tau_min}_${tau_max}_${pct_tau_min}_${pct_tau_max}
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
-    --run_name $desc \
-    --data_path . \
-    --data cc3m \
-    --output_dir output/$desc \
+    --run_name $run_name \
+    --data_path $data_path \
+    --data $data \
+    --output_dir output/${run_name} \
     --init_model \
     --use_amp \
-    --batch_size_train 512 \
-    --epochs 30 --lr 8e-4 \
+    --epochs 30 --lr $lr \
     --lr_temp_net 3e-5 \
-    --train_frac 1.0 \
+    --train_frac $frac \
     --zs_dataset cifar10 \
-    --ita_type clip \
-    --temperature_scheduler cos \
-    --tau_min $tau_min \
-    --tau_max $tau_max \
+    --ita_type clipPCT \
+    --temperature_scheduler cosPCT \
+    --tau_min 0.01 \
+    --tau_max 0.05 \
+    --pct_tau_min 0.01 \
+    --pct_tau_max 0.05 \
