@@ -83,7 +83,8 @@ def create_train_dataset(dataset, args, use_test_transform=False):
 
     return make_dataset_train(
         transform=train_transform,
-        batch_size=args.batch_size_train
+        batch_size=args.batch_size_train,
+        return_key=True
     )
 
     # DD
