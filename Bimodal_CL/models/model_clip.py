@@ -90,14 +90,14 @@ class CLIP(nn.Module):
             self.criterion = iSogCLR_TempNet_Loss(N=N, world_size=world_size, gamma=sogclr_gamma, rho=rho, feature_dim=embed_dim)
 
         # Cosine with per class temperature
-        elif self.ita_type == 'cosPCT':
+        elif self.ita_type == 'clipPCT':
             self.criterion = CLIP_Loss_PCT(world_size=world_size, temperature=self.temp)
 
         else:
             raise NotImplementedError
 
 
-    def forward(self, image, text, idx, text_idx, epoch, max_epoch, return_feat=False, classes_=None):
+    def forward(self, image, text, idx, text_idx, epoch, max_epoch, return_feat=False, per_sample_temperature=None):
         if self.learnable_temp:
             with torch.no_grad():
                 if not self.personalized_tau:
@@ -154,6 +154,16 @@ class CLIP(nn.Module):
 
         elif self.ita_type == 'onlineclr':
             loss_ita = self.criterion(image_feat, text_feat)
+
+        elif self.ita_type == 'clipPCT':
+            per_sample_temperature = concat_all_gather(per_sample_temperature)
+            print(f"===> Shape of per_sample_temperature: {per_sample_temperature.shape}")
+            print(f"===> Shape of image_features: {image_feat.shape}")
+            loss_ita = self.criterion(
+                image_features=image_feat, 
+                text_features=text_feat, 
+                per_sample_temperature=per_sample_temperature
+            )
 
         else:
             raise NotImplementedError
