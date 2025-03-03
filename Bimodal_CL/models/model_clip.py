@@ -3,7 +3,7 @@ from functools import partial
 import timm
 from transformers import AutoModel, RobertaModel
 
-from models.losses import CLIP_Loss, CyCLIP_Loss, SogCLR_Loss, iSogCLR_Loss, iSogCLR_TempNet_Loss, VICReg_Loss, onlineCLR_Loss
+from models.losses import CLIP_Loss, CyCLIP_Loss, SogCLR_Loss, iSogCLR_Loss, iSogCLR_TempNet_Loss, VICReg_Loss, onlineCLR_Loss, CLIP_Loss_PCT
 
 import torch
 from torch import nn
@@ -89,11 +89,15 @@ class CLIP(nn.Module):
         elif self.ita_type == 'isogclr_tempnet': # only use tempnet with new derivation, more deep structures
             self.criterion = iSogCLR_TempNet_Loss(N=N, world_size=world_size, gamma=sogclr_gamma, rho=rho, feature_dim=embed_dim)
 
+        # Cosine with per class temperature
+        elif self.ita_type == 'cosPCT':
+            self.criterion = CLIP_Loss_PCT(world_size=world_size, temperature=self.temp)
+
         else:
             raise NotImplementedError
 
 
-    def forward(self, image, text, idx, text_idx, epoch, max_epoch, return_feat=False):
+    def forward(self, image, text, idx, text_idx, epoch, max_epoch, return_feat=False, classes_=None):
         if self.learnable_temp:
             with torch.no_grad():
                 if not self.personalized_tau:
