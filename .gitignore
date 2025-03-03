@@ -12,3 +12,5 @@ output/
 datasets
 
 wandb
+
+test.py
