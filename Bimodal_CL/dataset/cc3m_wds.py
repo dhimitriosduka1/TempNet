@@ -28,7 +28,8 @@ def get_world_size():
 
 def get_dataset_size():
     # https://github.com/AILab-CVC/SEED/blob/93b3cf408196735ec4820ad2eb4d9dc4a670003d/MultiModalLLM/src/data/data.py#L73C1-L74C1
-    return 2905954
+    # After counting the files inside each tar folder, we have 2799842 images.
+    return 2799842
 
 
 def get_shard_list(
@@ -50,8 +51,16 @@ def decoder_pth(key, value):
 
 
 def make_dataset_train(
-    transform, max_words=30, cache_dir=None, batch_size=128, return_key=False
+    transform,
+    max_words=30,
+    batch_size=128,
+    tau_min=0.01,
+    tau_max=0.02,
 ):
+    
+    # Remove
+    seen_keys = {}
+
     def load_precomputed_classes(
         path="/BS/dduka/work/projects/TempNet/Bimodal_CL/key_class_mapping.pkl",
     ):
@@ -63,19 +72,17 @@ def make_dataset_train(
         image = sample["image.pth"]
         caption = sample["metadata.pyd"]["caption"]
         key = sample["__key__"]
-        class_ = precomputed_classes[key]
-        temperature = per_class_temperature[class_]
 
-        if return_key:
-            return (
-                transform(image),
-                pre_caption(caption=caption, max_words=max_words),
-                torch.tensor(-1.0),
-                torch.tensor(-1.0),
-                class_,
-                temperature,
-                key,
-            )
+        if key in seen_keys:
+            print(f"Duplicate retrieved in make_sample: {key}")
+        
+        seen_keys[key] = 1
+
+        # class_ = precomputed_classes[key]
+        # temperature = per_class_temperature[class_]
+
+        class_ = -1.0
+        temperature = 0.0
 
         return (
             transform(image),
@@ -83,42 +90,39 @@ def make_dataset_train(
             torch.tensor(-1.0),
             torch.tensor(-1.0),
             class_,
-            temperature
+            temperature,
+            key,
         )
-
-    train_set = wds.WebDataset(
-        urls=get_shard_list(),
-        resampled=True,
-        shardshuffle=True,
-        cache_dir=cache_dir,
-        nodesplitter=wds.split_by_worker,
-    )
 
     precomputed_classes = load_precomputed_classes()
     per_class_temperature = get_per_class_temperature(
-        classes_=precomputed_classes, tau_min=0.1, tau_max=0.2
+        classes_=precomputed_classes, tau_min=tau_min, tau_max=tau_max
     )
 
     train_set = (
-        train_set.shuffle(1000)
+        wds.WebDataset(
+            urls=get_shard_list(),
+            shardshuffle=1000,
+            resampled=True,
+            nodesplitter=None,
+        )
+        .shuffle(1000)
         .decode(decoder_pth)
-        .map(lambda sample: make_sample(sample, precomputed_classes, per_class_temperature))
+        .map(
+            lambda sample: make_sample(
+                sample, precomputed_classes, per_class_temperature
+            )
+        )
+        .batched(batch_size, partial=False)
     )
-    train_set = train_set.batched(batch_size)
 
     return train_set
 
 
-def make_dataloader_train(trainset, batch_size=128, num_workers=4):
-    trainloader = wds.WebLoader(trainset, batch_size=None, num_workers=num_workers)
+def make_dataloader_train(trainset, batch_size=128, num_workers=4, resample=True):
+    loader = wds.WebLoader(
+        trainset, batch_size=None, shuffle=False, num_workers=num_workers
+    )
 
-    # We unbatch, shuffle, and rebatch to mix samples from different workers.
-    trainloader = trainloader.unbatched().shuffle(1000).batched(batch_size)
-
-    # A resampled dataset is infinite size, but we can recreate a fixed epoch length.
-    world_size = get_world_size()
-    batches_per_epoch = get_dataset_size() // (batch_size * world_size)
-    trainloader.batches_per_epoch = batches_per_epoch
-    trainloader = trainloader.with_epoch(batches_per_epoch)
-
-    return trainloader
+    nbatches = max(1, get_dataset_size() // (batch_size * get_world_size()))
+    return loader.with_epoch(nbatches)
