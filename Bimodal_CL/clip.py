@@ -744,10 +744,10 @@ def main(args):
                 print(f"Duplicate key found: {key}")
             key_class_mapping[key] = labels[i]
 
-        with open('key_class_mapping.pkl', 'wb') as f:
+        with open('key_class_mapping_v2.pkl', 'wb') as f:
             pickle.dump(key_class_mapping, f)
 
-        print("Saved key_class_mapping to key_class_mapping.pkl")
+        print("Saved key_class_mapping to key_class_mapping_v2.pkl")
 
         # img_centroids = kmeans_img.cluster_centers_
         # txt_centroids = kmeans_txt.cluster_centers_

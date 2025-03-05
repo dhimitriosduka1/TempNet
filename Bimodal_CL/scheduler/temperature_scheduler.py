@@ -9,7 +9,7 @@ def get_next_temperature(tau_min, tau_max, period, global_it):
 
 
 def get_per_class_temperature(classes_, tau_min, tau_max):
-    counter = Counter([count for _, count in classes_.items()])
+    counter = Counter(classes_)
     counter = counter.most_common()
 
     min_samples = counter[-1][1]

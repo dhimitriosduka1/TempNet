@@ -11,6 +11,7 @@ from dataset.caption_dataset import (
 )
 from dataset.randaugment import RandomAugment
 from dataset.cc3m_wds import make_dataset_train
+# from dataset.cc3m import make_dataset_train
 
 
 class GaussianBlur(object):
