@@ -52,9 +52,9 @@ with torch.no_grad(), torch.cuda.amp.autocast():
         for filename, text_feature in zip(batch_filenames, batch_text_features):
             # taridx_sampleid -> sampleid
             filename = filename.split("_", 1)[1]
-            
+
             caption_features[filename] = {}
-            # caption_features[filename]["features"] = text_feature.cpu()
+            caption_features[filename]["features"] = text_feature.cpu()
             text_features.append(text_feature.cpu().numpy())
 
 text_features = np.array(text_features)
