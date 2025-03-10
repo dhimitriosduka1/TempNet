@@ -21,7 +21,9 @@ plt.plot(range(len(template_counts)), template_counts)
 plt.fill_between(
     range(len(template_counts)), template_counts, color="skyblue", alpha=0.4
 )
-plt.xlabel("Cluster Labels")
-plt.ylabel("# of Samples")
-plt.title(f"CC3M Cluster Size Distribution")
-plt.savefig(f"cc3m_class_distribution.pdf")
+plt.xticks(fontsize=16)
+plt.yticks(fontsize=16)
+plt.xlabel("Cluster Labels", fontsize=22)
+plt.ylabel("# of Samples", fontsize=22)
+plt.title(f"CC3M Cluster Size Distribution", fontsize=24)
+plt.savefig(f"cc3m_class_distribution.pdf", bbox_inches="tight", pad_inches=0.1)
