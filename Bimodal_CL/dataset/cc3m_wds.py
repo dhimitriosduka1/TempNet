@@ -58,7 +58,7 @@ def make_dataset_train(
     tau_max=0.02,
 ):
     def load_precomputed_classes(
-        path="/BS/dduka/work/projects/TempNet/Bimodal_CL/caption_features_without_tensors.pkl",
+        path="/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/caption_features_without_tensors.pkl",
     ):
         with open(path, "rb") as file:
             return pickle.load(file)

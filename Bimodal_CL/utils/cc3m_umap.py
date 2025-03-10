@@ -67,7 +67,7 @@ random.seed(42)
 
 # Load the classes of interest
 with open(
-    "/BS/dduka/work/projects/TempNet/Bimodal_CL/caption_features_without_tensors.pkl",
+    "/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/caption_features_without_tensors.pkl",
     "rb",
 ) as f:
     data = pickle.load(f)["metadata"]["classes"]

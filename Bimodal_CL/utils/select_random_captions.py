@@ -5,7 +5,7 @@ from collections import Counter
 
 # Load the pickle file
 with open(
-    "/BS/dduka/work/projects/TempNet/Bimodal_CL/caption_features_without_tensors.pkl",
+    "/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/caption_features_without_tensors.pkl",
     "rb",
 ) as f:
     data = pickle.load(f)

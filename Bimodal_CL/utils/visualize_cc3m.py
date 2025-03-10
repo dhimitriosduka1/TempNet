@@ -5,7 +5,7 @@ from collections import Counter
 
 cc3m_distribution = pickle.load(
     open(
-        "/BS/dduka/work/projects/TempNet/Bimodal_CL/caption_features_without_tensors.pkl",
+        "/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/caption_features_without_tensors.pkl",
         "rb",
     )
 )["metadata"]["classes"]
