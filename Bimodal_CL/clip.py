@@ -1093,6 +1093,8 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(0, max_epoch):
+        print(f"Epoch {epoch} of {max_epoch}")
+        
         eval_objects = {
             "model_without_ddp": model_without_ddp,
             "val_coco_loader": val_coco_loader,
