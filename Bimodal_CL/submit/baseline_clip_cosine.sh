@@ -3,7 +3,7 @@
 #SBATCH --job-name cc3m
 #SBATCH --partition gpu20
 
-#SBATCH --time=35:59:00
+#SBATCH --time=23:59:00
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -16,7 +16,7 @@ data_path=.
 data=cc3m
 lr=8e-4
 frac=1.0
-
+L
 tau_min=0.01
 tau_max=0.1
 
