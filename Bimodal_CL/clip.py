@@ -30,7 +30,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
-from torch.utils.data import DataLoader, Subset
 from torchvision import transforms, datasets
 
 from models.model_clip import CLIP
@@ -51,12 +50,10 @@ from optim import create_optimizer
 from tqdm import tqdm
 
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-from sklearn.preprocessing import StandardScaler
 
 from dataset.cc3m_wds import make_dataloader_train, get_dataset_size
 from scheduler.temperature_scheduler import get_next_temperature
+
 
 def train(
     model,
@@ -126,20 +123,21 @@ def train(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
 
-        # Log some stuff to wandb
         if i % 500 == 0:
             model.eval()
-            val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = evalutate_on_flicker_and_mscoco(
-                model_without_ddp=eval_objects["model_without_ddp"],
-                val_coco_loader=eval_objects["val_coco_loader"],
-                test_coco_loader=eval_objects["test_coco_loader"],
-                val_flickr_loader=eval_objects["val_flickr_loader"],
-                test_flickr_loader=eval_objects["test_flickr_loader"],
-                tokenizer=tokenizer,
-                device=device,
-                args=args
+            val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = (
+                evalutate_on_flicker_and_mscoco(
+                    model_without_ddp=eval_objects["model_without_ddp"],
+                    val_coco_loader=eval_objects["val_coco_loader"],
+                    test_coco_loader=eval_objects["test_coco_loader"],
+                    val_flickr_loader=eval_objects["val_flickr_loader"],
+                    test_flickr_loader=eval_objects["test_flickr_loader"],
+                    tokenizer=tokenizer,
+                    device=device,
+                    args=args,
+                )
             )
-       
+
         model.train()
 
         if optimizer_tempnet is not None:
@@ -169,10 +167,10 @@ def train(
 
                     # Get next temperature
                     updated_temperature = get_next_temperature(
-                        tau_min=args.tau_min, 
-                        tau_max=args.tau_max, 
-                        global_it=global_it, 
-                        period=period
+                        tau_min=args.tau_min,
+                        tau_max=args.tau_max,
+                        global_it=global_it,
+                        period=period,
                     )
 
                     # Set next temperature
@@ -185,11 +183,16 @@ def train(
                     text_idx=text_idx,
                     epoch=epoch,
                     max_epoch=max_epoch,
-                    per_sample_temperature=temperature
+                    per_sample_temperature=temperature,
                 )
 
                 if utils.is_main_process():
-                    wandb.log({"train/loss": loss_term, "train/lr": optimizer.param_groups[0]["lr"]})
+                    wandb.log(
+                        {
+                            "train/loss": loss_term,
+                            "train/lr": optimizer.param_groups[0]["lr"],
+                        }
+                    )
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
@@ -255,10 +258,16 @@ def train(
         print("image tau mean:", np.mean(image_tau_array))
         print("text tau mean:", np.mean(text_tau_array))
 
-    return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr, {
-        k: "{:.3f}".format(meter.global_avg)
-        for k, meter in metric_logger.meters.items()
-    }
+    return (
+        val_result_coco,
+        test_result_coco,
+        val_result_flickr,
+        test_result_flickr,
+        {
+            k: "{:.3f}".format(meter.global_avg)
+            for k, meter in metric_logger.meters.items()
+        },
+    )
 
 
 """
@@ -516,10 +525,7 @@ def main(args):
 
     if utils.is_main_process():
         wandb.init(
-            project="Bimodal_CL_CC3M",
-            name=args.run_name,
-            resume="allow",
-            config=args
+            project="Bimodal_CL_CC3M", name=args.run_name, resume="allow", config=args
         )
 
     device = torch.device(args.device)
@@ -555,7 +561,7 @@ def main(args):
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
-    
+
     # print("len of sbu data:", len(sbu_dataset))
 
     if args.extract_data:
@@ -592,9 +598,7 @@ def main(args):
     # )
 
     train_loader = make_dataloader_train(
-        trainset=train_dataset,
-        batch_size=args.batch_size_train,
-        num_workers=8
+        trainset=train_dataset, batch_size=args.batch_size_train, num_workers=8
     )
 
     val_coco_loader, test_coco_loader = create_val_loader(
@@ -611,7 +615,7 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
-    
+
     # DD
     # sbu_loader = create_val_loader(
     #     [sbu_dataset], [None], [args.batch_size_test], [32], [None]
@@ -671,7 +675,9 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, idx, text_idx, _, __, key) in tqdm(enumerate(train_loader)):
+        for i, (image, text, idx, text_idx, _, __, key) in tqdm(
+            enumerate(train_loader)
+        ):
 
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
@@ -695,9 +701,7 @@ def main(args):
                 # image_feat = concat_all_gather(image_feat)
                 text_feat = concat_all_gather(text_feat)
 
-                gathered_keys = [
-                    [] for _ in range(torch.distributed.get_world_size())
-                ]
+                gathered_keys = [[] for _ in range(torch.distributed.get_world_size())]
 
                 torch.distributed.all_gather_object(gathered_keys, key)
                 key = list(chain(*gathered_keys))
@@ -744,7 +748,7 @@ def main(args):
                 print(f"Duplicate key found: {key}")
             key_class_mapping[key] = labels[i]
 
-        with open('key_class_mapping_v2.pkl', 'wb') as f:
+        with open("key_class_mapping_v2.pkl", "wb") as f:
             pickle.dump(key_class_mapping, f)
 
         print("Saved key_class_mapping to key_class_mapping_v2.pkl")
@@ -1094,10 +1098,16 @@ def main(args):
             "val_coco_loader": val_coco_loader,
             "test_coco_loader": test_coco_loader,
             "val_flickr_loader": val_flickr_loader,
-            "test_flickr_loader": test_flickr_loader
+            "test_flickr_loader": test_flickr_loader,
         }
 
-        val_result_coco, test_result_coco, val_result_flickr, test_result_flickr, train_stats = train(
+        (
+            val_result_coco,
+            test_result_coco,
+            val_result_flickr,
+            test_result_flickr,
+            train_stats,
+        ) = train(
             model,
             train_loader,
             optimizer,
@@ -1110,9 +1120,9 @@ def main(args):
             lr_scheduler,
             grad_scaler,
             args,
-            eval_objects=eval_objects
+            eval_objects=eval_objects,
         )
-        
+
         # save tau for visualization
         if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
             print("saving tau...")
@@ -1146,9 +1156,7 @@ def main(args):
                 "args": args,
                 "epoch": epoch,
             }
-            torch.save(
-                save_obj, os.path.join(args.output_dir, "checkpoint_best.pth")
-            )
+            torch.save(save_obj, os.path.join(args.output_dir, "checkpoint_best.pth"))
             best = val_result_coco["r_mean"]
             best_epoch = epoch
 
@@ -1156,9 +1164,7 @@ def main(args):
             save_obj = {"model": model_without_ddp.state_dict()}
             torch.save(
                 save_obj,
-                os.path.join(
-                    args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
-                ),
+                os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
             )
 
         lr_scheduler.step(epoch + warmup_steps + 1)
@@ -1175,7 +1181,17 @@ def main(args):
 
     wandb.finish()
 
-def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coco_loader, val_flickr_loader, test_flickr_loader, tokenizer, device, args):
+
+def evalutate_on_flicker_and_mscoco(
+    model_without_ddp,
+    val_coco_loader,
+    test_coco_loader,
+    val_flickr_loader,
+    test_flickr_loader,
+    tokenizer,
+    device,
+    args,
+):
     score_val_i2t_coco, score_val_t2i_coco = evaluation(
         model_without_ddp, val_coco_loader, tokenizer, device, args
     )
@@ -1197,7 +1213,9 @@ def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coc
         val_coco_loader.dataset.img2txt,
     )
     print("coco val:", val_result_coco)
-    val_result_coco_wandb = {"coco/val/" + key: value for key, value in val_result_coco.items()}
+    val_result_coco_wandb = {
+        "coco/val/" + key: value for key, value in val_result_coco.items()
+    }
 
     test_result_coco = itm_eval(
         score_test_i2t_coco,
@@ -1206,9 +1224,10 @@ def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coc
         test_coco_loader.dataset.img2txt,
     )
     print("coco test:", test_result_coco)
-    test_result_coco_wandb = {"coco/test/" + key: value for key, value in test_result_coco.items()}
+    test_result_coco_wandb = {
+        "coco/test/" + key: value for key, value in test_result_coco.items()
+    }
 
-    
     val_result_flickr = itm_eval(
         score_val_i2t_flickr,
         score_val_t2i_flickr,
@@ -1216,7 +1235,9 @@ def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coc
         val_flickr_loader.dataset.img2txt,
     )
     print("flickr val:", val_result_flickr)
-    val_result_flickr_wandb = {"flickr/val/" + key: value for key, value in val_result_flickr.items()}
+    val_result_flickr_wandb = {
+        "flickr/val/" + key: value for key, value in val_result_flickr.items()
+    }
 
     test_result_flickr = itm_eval(
         score_test_i2t_flickr,
@@ -1224,17 +1245,24 @@ def evalutate_on_flicker_and_mscoco(model_without_ddp, val_coco_loader, test_coc
         test_flickr_loader.dataset.txt2img,
         test_flickr_loader.dataset.img2txt,
     )
-    
-    print("flickr test:", test_result_flickr)
-    test_result_flickr_wandb = {"flickr/test/" + key: value for key, value in test_result_flickr.items()}
 
-    overall_stats = val_result_coco_wandb | test_result_coco_wandb | val_result_flickr_wandb | test_result_flickr_wandb
-    
+    print("flickr test:", test_result_flickr)
+    test_result_flickr_wandb = {
+        "flickr/test/" + key: value for key, value in test_result_flickr.items()
+    }
+
+    overall_stats = (
+        val_result_coco_wandb
+        | test_result_coco_wandb
+        | val_result_flickr_wandb
+        | test_result_flickr_wandb
+    )
+
     if utils.is_main_process():
         wandb.log(data=overall_stats, step=wandb.run.step)
 
     return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1274,8 +1302,8 @@ if __name__ == "__main__":
     # training & test settings
     parser.add_argument("--use_amp", action="store_true")
     parser.add_argument("--init_model", action="store_true")
-    parser.add_argument("--batch_size_train", default=256, type=int)
-    parser.add_argument("--batch_size_test", default=256, type=int)
+    parser.add_argument("--batch_size_train", default=512, type=int)
+    parser.add_argument("--batch_size_test", default=512, type=int)
     parser.add_argument("--k_test", default=256, type=int)
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--checkpoint", default="", type=str)
@@ -1304,7 +1332,7 @@ if __name__ == "__main__":
             "isogclr",
             "isogclr_tempnet",
             "onlineclr",
-            "clipPCT"
+            "clipPCT",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1362,7 +1390,9 @@ if __name__ == "__main__":
     parser.add_argument("--run_name", required=True)
 
     # Temperature
-    parser.add_argument("--temperature_scheduler", default="none", choices=["none", "cos", "cosPCT"])
+    parser.add_argument(
+        "--temperature_scheduler", default="none", choices=["none", "cos", "cosPCT"]
+    )
     parser.add_argument("--tau_min", default=0.01, type=float)
     parser.add_argument("--tau_max", default=0.02, type=float)
     parser.add_argument("--pct_tau_min", default=0.01, type=float)
@@ -1390,6 +1420,10 @@ if __name__ == "__main__":
     # args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
     # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
+    # Add timestamp to output_dir so that every run is unique
+    args.output_dir = os.path.join(
+        args.output_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+    )
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     json.dump(
