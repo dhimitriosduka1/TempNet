@@ -631,11 +631,12 @@ def main(args):
         )
 
     #### Zero-shot transfer ####
-    zeroshot_dataloader = create_zeroshot_dataloader(
-        dataset_name=args.zs_dataset,
-        data_folder=args.zs_datafolder,
-        image_size=args.image_res,
-    )
+    # DD
+    # zeroshot_dataloader = create_zeroshot_dataloader(
+    #     dataset_name=args.zs_dataset,
+    #     data_folder=args.zs_datafolder,
+    #     image_size=args.image_res,
+    # )
 
     #### Model ####
     print("Creating model")
@@ -1094,7 +1095,7 @@ def main(args):
     start_time = time.time()
     for epoch in range(0, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
-        
+
         eval_objects = {
             "model_without_ddp": model_without_ddp,
             "val_coco_loader": val_coco_loader,
@@ -1371,7 +1372,7 @@ if __name__ == "__main__":
 
     # zero-shot transfer
     parser.add_argument(
-        "--zs_dataset", required=True, choices=["cifar10", "cifar100", "imagenet"]
+        "--zs_dataset", choices=["cifar10", "cifar100", "imagenet"]
     )
     parser.add_argument("--zs_datafolder", default="./datasets", type=str)
 
