@@ -171,6 +171,7 @@ def train(
                         tau_max=args.tau_max,
                         global_it=global_it,
                         period=period,
+                        offset=args.offset
                     )
 
                     # Set next temperature
@@ -1400,6 +1401,7 @@ if __name__ == "__main__":
     parser.add_argument("--tau_max", default=0.02, type=float)
     parser.add_argument("--pct_tau_min", default=0.01, type=float)
     parser.add_argument("--pct_tau_max", default=0.02, type=float)
+    parser.add_argument("--offset", default=0.0, type=float)
 
     args = parser.parse_args()
 
