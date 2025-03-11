@@ -778,7 +778,7 @@ def main(args):
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
         state_dict = checkpoint["model"]
         model.load_state_dict(state_dict, strict=False)
-        print("load checkpoint from %s" % args.checkpoint)
+        print("Load checkpoint from %s" % args.checkpoint)
 
     else:
         # pass
@@ -1092,9 +1092,25 @@ def main(args):
     best = 0
     best_epoch = 0
 
+    if len(args.checkpoint) > 0:
+        # Load optimizer state if it exists in the checkpoint
+        if "optimizer" in checkpoint and optimizer is not None:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+            print("Loaded optimizer state")
+        
+        # Load scheduler state if it exists
+        if "lr_scheduler" in checkpoint and lr_scheduler is not None:
+            lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            print("Loaded lr_scheduler state")
+        
+        # Resume from the next epoch
+        if "epoch" in checkpoint:
+            args.start_epoch = checkpoint["epoch"] + 1
+            print(f"Will start from epoch {args.start_epoch}")
+
     print("Start training")
     start_time = time.time()
-    for epoch in range(0, max_epoch):
+    for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
 
         eval_objects = {
@@ -1165,7 +1181,6 @@ def main(args):
             best_epoch = epoch
 
         if (epoch + 1) % 5 == 0 or epoch <= 10:
-            save_obj = {"model": model_without_ddp.state_dict()}
             torch.save(
                 save_obj,
                 os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
@@ -1300,6 +1315,7 @@ if __name__ == "__main__":
     parser.add_argument("--weight_decay", default=0.02, type=float)
     parser.add_argument("--decay_rate", default=1, type=float)
     parser.add_argument("--epochs", default=30, type=int)
+    parser.add_argument("--start_epoch", default=0, type=int)
     parser.add_argument("--warmup_epochs", default=20, type=int)
     parser.add_argument("--cooldown_epochs", default=0, type=int)
 
