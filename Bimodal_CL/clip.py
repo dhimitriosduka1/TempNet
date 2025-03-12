@@ -1117,6 +1117,11 @@ def main(args):
             args.start_epoch = checkpoint["epoch"] + 1
             print(f"Will start from epoch {args.start_epoch}")
 
+            # Also set the global_step in wandb
+            if utils.is_main_process():
+                wandb.run._step = wandb.run._starting_step = args.start_epoch * train_loader.batches_per_epoch
+            
+
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, max_epoch):
@@ -1467,4 +1472,11 @@ if __name__ == "__main__":
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
     shutil.copy("./models/losses.py", args.output_dir)
-    main(args)
+
+    try:
+        main(args)
+    except Exception as e:
+        wandb.alert(title="Training Failed", text=str(e))  # Send an alert if enabled
+        print(f"Error occurred: {e}")
+    finally:
+        wandb.finish()  # Ensure W&B run is properly closed
