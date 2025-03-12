@@ -171,7 +171,7 @@ def train(
                         tau_max=args.tau_max,
                         global_it=global_it,
                         period=period,
-                        offset=args.offset
+                        offset=args.offset,
                     )
 
                     # Set next temperature
@@ -240,7 +240,12 @@ def train(
             metric_logger.update(avg_image_tau=args.temp)
             metric_logger.update(avg_text_tau=args.temp)
 
-        if epoch == 0 and i % step_size == 0 and i <= warmup_iterations:
+        if (
+            epoch == 0
+            and i % step_size == 0
+            and i <= warmup_iterations
+            and args.sched != "midpoint"
+        ):
             scheduler.step(i // step_size)
 
     # gather the stats from all processes
@@ -526,7 +531,11 @@ def main(args):
 
     if utils.is_main_process():
         wandb.init(
-            project="Bimodal_CL_CC3M", name=args.run_name, resume="allow", config=args
+            project="Bimodal_CL_CC3M",
+            name=args.run_name,
+            resume="allow",
+            config=args,
+            entity="dduka-max-planck-society",
         )
 
     device = torch.device(args.device)
@@ -1097,12 +1106,12 @@ def main(args):
         if "optimizer" in checkpoint and optimizer is not None:
             optimizer.load_state_dict(checkpoint["optimizer"])
             print("Loaded optimizer state")
-        
+
         # Load scheduler state if it exists
         if "lr_scheduler" in checkpoint and lr_scheduler is not None:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
             print("Loaded lr_scheduler state")
-        
+
         # Resume from the next epoch
         if "epoch" in checkpoint:
             args.start_epoch = checkpoint["epoch"] + 1
@@ -1186,7 +1195,12 @@ def main(args):
                 os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
             )
 
-        lr_scheduler.step(epoch + warmup_steps + 1)
+        if args.sched == "midpoint":
+            # This scheduler just needs the number of epochs and nothing else
+            lr_scheduler.step(epoch)
+        else:
+            lr_scheduler.step(epoch + warmup_steps + 1)
+
         dist.barrier()
         torch.cuda.empty_cache()
 
@@ -1306,7 +1320,7 @@ if __name__ == "__main__":
 
     # optimizer and schedular
     parser.add_argument("--opt", default="adamW")
-    parser.add_argument("--sched", default="cosine")
+    parser.add_argument("--sched", default="cosine", choices=["cosine", "midpoint"])
     parser.add_argument("--lr", default=2e-4, type=float)
     parser.add_argument("--min_lr", default=1e-5, type=float)
     parser.add_argument("--lr_temp_net", default=6e-6, type=float)
@@ -1318,6 +1332,10 @@ if __name__ == "__main__":
     parser.add_argument("--start_epoch", default=0, type=int)
     parser.add_argument("--warmup_epochs", default=20, type=int)
     parser.add_argument("--cooldown_epochs", default=0, type=int)
+
+    # For midpoint lr schedule
+    parser.add_argument("--lr_start", default=3e-4, type=float)
+    parser.add_argument("--lr_end", default=2e-4, type=float)
 
     # training & test settings
     parser.add_argument("--use_amp", action="store_true")
@@ -1388,9 +1406,7 @@ if __name__ == "__main__":
     parser.add_argument("--vis_prototypes", action="store_true")
 
     # zero-shot transfer
-    parser.add_argument(
-        "--zs_dataset", choices=["cifar10", "cifar100", "imagenet"]
-    )
+    parser.add_argument("--zs_dataset", choices=["cifar10", "cifar100", "imagenet"])
     parser.add_argument("--zs_datafolder", default="./datasets", type=str)
 
     # arguments for bilevel tempnet
