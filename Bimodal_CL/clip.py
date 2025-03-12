@@ -1114,7 +1114,7 @@ def main(args):
 
         # Resume from the next epoch
         if "epoch" in checkpoint:
-            args.start_epoch = checkpoint["epoch"] + 1
+            args.start_epoch = checkpoint["epoch"]
             print(f"Will start from epoch {args.start_epoch}")
 
             # Also set the global_step in wandb
@@ -1194,7 +1194,7 @@ def main(args):
             best = val_result_coco["r_mean"]
             best_epoch = epoch
 
-        if (epoch + 1) % 5 == 0 or epoch <= 10:
+        if (epoch + 1) % 2 == 0 or epoch <= 10:
             torch.save(
                 save_obj,
                 os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
