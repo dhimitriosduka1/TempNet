@@ -18,7 +18,7 @@ LR=2e-4
 TAU_MIN=0.01
 TAU_MAX=0.07
 
-DESC=BASELINE_CLIP_COS_${TAU_MIN}_${TAU_MAX}_TEST
+DESC=BASELINE_CLIP_COS_${TAU_MIN}_${TAU_MAX}
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
