@@ -35,7 +35,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --output_dir /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.07_lr_midpoint_3e-4_2e-4/clip_cos.sh \
     --init_model \
     --use_amp \
-    --epochs 10 --lr $LR \
+    --epochs 30 --lr $LR \
     --ita_type clip \
     --temperature_scheduler cos \
     --tau_min $TAU_MIN \
