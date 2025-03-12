@@ -27,6 +27,9 @@ unset __mamba_setup
 
 micromamba activate bimodal_cl
 
+PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
+cd "${PROJECT_DIR}"
+
 DATA_PATH=.
 DATA=cc3m
 LR=2e-4
@@ -36,11 +39,11 @@ TAU_MAX=0.07
 DESC=BASELINE_CLIP_COS_${TAU_MIN}_${TAU_MAX}_LR_${LR}_REV
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
-    --use_env /BS/dduka/work/projects/TempNet/Bimodal_CL/clip.py \
+    --use_env clip.py \
     --run_name $DESC \
     --data_path $DATA_PATH \
     --data $DATA \
-    --output_dir /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/anna/clip_cos_0.01_0.07_lr_2e-4_reverse/ \
+    --output_dir ./submit/anna/clip_cos_0.01_0.07_lr_2e-4_reverse/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
