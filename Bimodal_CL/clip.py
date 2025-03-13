@@ -51,7 +51,12 @@ from tqdm import tqdm
 
 from sklearn.cluster import KMeans
 
-from dataset.cc3m_wds import make_dataloader_train, get_dataset_size
+from dataset.cc3m_wds import (
+    make_dataloader_train,
+    get_train_dataset_size,
+    get_val_dataset_size,
+    make_dataloader_val,
+)
 from scheduler.temperature_scheduler import get_next_temperature
 
 
@@ -126,12 +131,13 @@ def train(
         if i % 500 == 0:
             model.eval()
             val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = (
-                evalutate_on_flicker_and_mscoco(
+                evalutate(
                     model_without_ddp=eval_objects["model_without_ddp"],
                     val_coco_loader=eval_objects["val_coco_loader"],
                     test_coco_loader=eval_objects["test_coco_loader"],
                     val_flickr_loader=eval_objects["val_flickr_loader"],
                     test_flickr_loader=eval_objects["test_flickr_loader"],
+                    val_cc3m_loader=eval_objects["val_cc3m_loader"],
                     tokenizer=tokenizer,
                     device=device,
                     args=args,
@@ -462,6 +468,90 @@ def evaluation(model, data_loader, tokenizer, device, args):
 
 
 @torch.no_grad()
+def evaluation_cc3m(model, data_loader, tokenizer, device, args):
+    model.eval()
+
+    print("Computing features for evaluation...")
+    start_time = time.time()
+
+    text_embeds = []
+    image_embeds = []
+    for i, (image, text, _, _) in enumerate(data_loader):
+        # Text features
+        text_input = tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
+
+        text_output = model.text_encoder(
+            text_input.input_ids,
+            attention_mask=text_input.attention_mask,
+            output_hidden_states=False,
+        )
+
+        text_embed = F.normalize(
+            model.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
+        )
+
+        text_embeds.append(text_embed)
+
+        # Image features
+        image = image.to(device)
+        image_feat = model.visual_encoder(image)
+        image_embed = model.vision_proj(image_feat)
+        image_embed = F.normalize(image_embed, dim=-1)
+        image_embeds.append(image_embed)
+
+    text_embeds = torch.cat(text_embeds, dim=0)
+    image_embeds = torch.cat(image_embeds, dim=0)
+
+    sims_matrix = image_embeds @ text_embeds.t()
+
+    score_matrix_i2t = torch.full((len(image_embeds), len(text_embeds)), -100.0).to(
+        device
+    )
+
+    num_tasks = utils.get_world_size()
+    rank = utils.get_rank()
+    step = sims_matrix.size(0) // num_tasks + 1
+    start = rank * step
+    end = min(sims_matrix.size(0), start + step)
+
+    for i, sims in enumerate(sims_matrix[start:end]):
+        topk_sim, topk_idx = sims.topk(k=args.k_test, dim=0)
+        score_matrix_i2t[start + i, topk_idx] = topk_sim
+
+    sims_matrix = sims_matrix.t()
+    score_matrix_t2i = torch.full((len(text_embeds), len(image_embeds)), -100.0).to(
+        device
+    )
+
+    step = sims_matrix.size(0) // num_tasks + 1
+    start = rank * step
+    end = min(sims_matrix.size(0), start + step)
+
+    for i, sims in enumerate(sims_matrix[start:end]):
+        topk_sim, topk_idx = sims.topk(k=args.k_test, dim=0)
+        score_matrix_t2i[start + i, topk_idx] = topk_sim
+
+    dist.barrier()
+    torch.distributed.all_reduce(score_matrix_i2t, op=torch.distributed.ReduceOp.SUM)
+    torch.distributed.all_reduce(score_matrix_t2i, op=torch.distributed.ReduceOp.SUM)
+
+    total_time = time.time() - start_time
+    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    print("Evaluation time {}".format(total_time_str))
+    print(
+        f"CC3M stats: shape of i2t matrix {score_matrix_i2t.shape} and t2i matrix {score_matrix_t2i.shape}"
+    )
+
+    return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy()
+
+
+@torch.no_grad()
 def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
 
     # Images->Text
@@ -557,20 +647,30 @@ def main(args):
 
     # DD
     # args.data_number = len(train_dataset)
-    args.data_number = get_dataset_size()
+    args.data_number = get_train_dataset_size()
 
     val_coco_dataset, test_coco_dataset = create_val_dataset(
         "re", args, args.val_coco_file, args.coco_image_root, args.test_coco_file
     )
+
     val_flickr_dataset, test_flickr_dataset = create_val_dataset(
         "re", args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file
     )
 
+    # For loading cc3m, we need to set the load_cc3m_val flag to True
+    val_cc3m_dataset = create_val_dataset(
+        dataset=None,
+        args=args,
+        val_file=None,
+        val_image_root=None,
+        load_cc3m_val=True,
+    )
     # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
 
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
+    print("len of cc3m val:", get_val_dataset_size())
 
     # print("len of sbu data:", len(sbu_dataset))
 
@@ -618,6 +718,7 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
+
     val_flickr_loader, test_flickr_loader = create_val_loader(
         [val_flickr_dataset, test_flickr_dataset],
         [None, None],
@@ -625,6 +726,8 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
+
+    val_cc3m_loader = make_dataloader_val(val_cc3m_dataset)
 
     # DD
     # sbu_loader = create_val_loader(
@@ -1127,10 +1230,11 @@ def main(args):
 
             # Also set the global_step in wandb
             if utils.is_main_process():
-                wandb.run._step = wandb.run._starting_step = args.start_epoch * train_loader.batches_per_epoch
+                wandb.run._step = wandb.run._starting_step = (
+                    args.start_epoch * train_loader.batches_per_epoch
+                )
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
-            
 
     print("Start training")
     start_time = time.time()
@@ -1143,6 +1247,7 @@ def main(args):
             "test_coco_loader": test_coco_loader,
             "val_flickr_loader": val_flickr_loader,
             "test_flickr_loader": test_flickr_loader,
+            "val_cc3m_loader": val_cc3m_loader,
         }
 
         (
@@ -1199,7 +1304,7 @@ def main(args):
             "args": args,
             "epoch": epoch,
         }
-        
+
         if val_result_coco["r_mean"] > best:
             torch.save(save_obj, os.path.join(args.output_dir, "checkpoint_best.pth"))
             best = val_result_coco["r_mean"]
@@ -1231,12 +1336,13 @@ def main(args):
     wandb.finish()
 
 
-def evalutate_on_flicker_and_mscoco(
+def evalutate(
     model_without_ddp,
     val_coco_loader,
     test_coco_loader,
     val_flickr_loader,
     test_flickr_loader,
+    val_cc3m_loader,
     tokenizer,
     device,
     args,
@@ -1254,6 +1360,22 @@ def evalutate_on_flicker_and_mscoco(
     score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
         model_without_ddp, test_flickr_loader, tokenizer, device, args
     )
+
+    score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation_cc3m(
+        model_without_ddp, val_cc3m_loader, tokenizer, device, args
+    )
+
+    print("val_cc3m_loader.dataset:", val_cc3m_loader.dataset)
+    val_result_cc3m = itm_eval(
+        score_val_i2t_cc3m,
+        score_val_t2i_cc3m,
+        val_cc3m_loader.dataset["txt2img"],
+        val_cc3m_loader.dataset["img2txt"],
+    )
+    print("cc3m val:", val_result_cc3m)
+    val_result_cc3m_wandb = {
+        "cc3m/val/" + key: value for key, value in val_result_cc3m_wandb.items()
+    }
 
     val_result_coco = itm_eval(
         score_val_i2t_coco,
@@ -1305,6 +1427,7 @@ def evalutate_on_flicker_and_mscoco(
         | test_result_coco_wandb
         | val_result_flickr_wandb
         | test_result_flickr_wandb
+        | val_result_cc3m_wandb
     )
 
     if utils.is_main_process():
