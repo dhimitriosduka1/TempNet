@@ -138,8 +138,8 @@ def make_dataset_val(transform, max_words=30, batch_size=128):
             # Placeholder for class
             torch.tensor(-1.0),
         )
-
-    return (
+    
+    dataset = (
         wds.WebDataset(
             urls=get_val_shards(),
             nodesplitter=wds.split_by_worker,
@@ -148,6 +148,16 @@ def make_dataset_val(transform, max_words=30, batch_size=128):
         .map(make_sample_val)
         .batched(batch_size)
     )
+
+    # Add mappings for evaluation
+    dataset.txt2img = {}
+    dataset.img2txt = {}
+
+    size = get_val_dataset_size()
+    dataset.txt2img = {i: [i] for i in range(size)}
+    dataset.img2txt = {i: [i] for i in range(size)}
+
+    return dataset
 
 
 def make_dataloader_train(trainset, batch_size=128, num_workers=4):
