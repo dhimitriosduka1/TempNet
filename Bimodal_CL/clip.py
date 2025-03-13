@@ -788,7 +788,7 @@ def main(args):
         state_dict = checkpoint["model"]
         model.load_state_dict(state_dict, strict=False)
         print("Load checkpoint from %s" % args.checkpoint)
-        print(f"Keys in checkpoint model: {state_dict.keys()}")
+        print(f"Keys in checkpoint model: {checkpoint.keys()}")
 
     else:
         # pass
@@ -1103,6 +1103,7 @@ def main(args):
     best_epoch = 0
 
     if len(args.checkpoint) > 0:
+        print(f"========== Loading states from {args.checkpoint} ==========")
         # Load optimizer state if it exists in the checkpoint
         if "optimizer" in checkpoint and optimizer is not None:
             optimizer.load_state_dict(checkpoint["optimizer"])
@@ -1121,11 +1122,14 @@ def main(args):
         # Resume from the next epoch
         if "epoch" in checkpoint:
             args.start_epoch = checkpoint["epoch"]
-            print(f"Will start from epoch {args.start_epoch}")
+            print(f"Epoch stored in checkpoint: {args.start_epoch}")
+            print(f"Training will start from epoch {args.start_epoch}")
 
             # Also set the global_step in wandb
             if utils.is_main_process():
                 wandb.run._step = wandb.run._starting_step = args.start_epoch * train_loader.batches_per_epoch
+
+        print(f"========== Loaded states from {args.checkpoint} ==========")
             
 
     print("Start training")
@@ -1188,14 +1192,15 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write(json.dumps(log_stats) + "\n")
 
+        save_obj = {
+            "model": model_without_ddp.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "lr_scheduler": lr_scheduler.state_dict(),
+            "args": args,
+            "epoch": epoch,
+        }
+        
         if val_result_coco["r_mean"] > best:
-            save_obj = {
-                "model": model_without_ddp.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "lr_scheduler": lr_scheduler.state_dict(),
-                "args": args,
-                "epoch": epoch,
-            }
             torch.save(save_obj, os.path.join(args.output_dir, "checkpoint_best.pth"))
             best = val_result_coco["r_mean"]
             best_epoch = epoch
