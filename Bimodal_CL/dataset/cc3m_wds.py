@@ -93,9 +93,7 @@ def make_dataset_train(
     per_class_temperature = get_per_class_temperature(
         classes_=precomputed_classes["metadata"]["classes"], tau_min=tau_min, tau_max=tau_max
     )
-
-    print(f"Using per-class-temperatures: {per_class_temperature}")
-
+    
     train_set = (
         train_set.shuffle(1000)
         .decode(decoder_pth)

@@ -788,6 +788,7 @@ def main(args):
         state_dict = checkpoint["model"]
         model.load_state_dict(state_dict, strict=False)
         print("Load checkpoint from %s" % args.checkpoint)
+        print(f"Keys in checkpoint model: {state_dict.keys()}")
 
     else:
         # pass
@@ -1111,6 +1112,11 @@ def main(args):
         if "lr_scheduler" in checkpoint and lr_scheduler is not None:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
             print("Loaded lr_scheduler state")
+
+        # Load old args
+        if "args" in checkpoint:
+            args = checkpoint["args"]
+            print(f"Loaded args from checkpoint: {args}")
 
         # Resume from the next epoch
         if "epoch" in checkpoint:
