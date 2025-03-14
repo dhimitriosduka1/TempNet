@@ -1327,11 +1327,11 @@ def main(args):
             best = val_result_coco["r_mean"]
             best_epoch = epoch
 
-        if (epoch + 1) % 2 == 0 or epoch <= 10:
-            torch.save(
-                save_obj,
-                os.path.join(args.output_dir, "checkpoint_last.pth"),
-            )
+        
+        torch.save(
+            save_obj,
+            os.path.join(args.output_dir, "checkpoint_last.pth"),
+        )
 
         if args.sched == "midpoint":
             # This scheduler just needs the number of epochs and nothing else
