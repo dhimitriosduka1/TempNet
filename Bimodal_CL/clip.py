@@ -898,10 +898,7 @@ def main(args):
 
         return
 
-    # Check if a checkpoint for the current run exists. If it does, load the model from the checkpoint
-    saved_checkpoint_path = os.path.join(args.output_dir, "checkpoint_last.pth")
-
-    if len(args.checkpoint) > 0 or os.path.exists(saved_checkpoint_path):
+    if len(args.checkpoint) > 0:
         checkpoint_path = args.checkpoint or saved_checkpoint_path
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state_dict = checkpoint["model"]
@@ -1221,7 +1218,7 @@ def main(args):
     best = 0
     best_epoch = 0
 
-    if len(args.checkpoint) > 0 or os.path.exists(saved_checkpoint_path):
+    if len(args.checkpoint) > 0:
         print(f"========== Loading states from {args.checkpoint} ==========")
         # Load optimizer state if it exists in the checkpoint
         if "optimizer" in checkpoint and optimizer is not None:
@@ -1257,6 +1254,7 @@ def main(args):
 
     print("Start training")
     start_time = time.time()
+
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
 
@@ -1344,7 +1342,8 @@ def main(args):
         dist.barrier()
         torch.cuda.empty_cache()
 
-        break
+        if epoch == 1:
+            break
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -1629,6 +1628,12 @@ if __name__ == "__main__":
     # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
     # Add timestamp to output_dir so that every run is unique
+
+    saved_checkpoint_path = os.path.join(args.output_dir, "checkpoint_last.pth")
+
+    if os.path.exists(saved_checkpoint_path):
+        args.checkpoint = saved_checkpoint_path
+
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     json.dump(
