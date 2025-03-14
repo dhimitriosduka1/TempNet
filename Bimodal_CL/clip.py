@@ -898,8 +898,12 @@ def main(args):
 
         return
 
-    if len(args.checkpoint) > 0:
-        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+    # Check if a checkpoint for the current run exists. If it does, load the model from the checkpoint
+    saved_checkpoint_path = os.path.join(args.output_dir, "checkpoint_last.pth")
+
+    if len(args.checkpoint) > 0 or os.path.exists(saved_checkpoint_path):
+        checkpoint_path = args.checkpoint or saved_checkpoint_path
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state_dict = checkpoint["model"]
         model.load_state_dict(state_dict, strict=False)
         print("Load checkpoint from %s" % args.checkpoint)
@@ -1217,7 +1221,7 @@ def main(args):
     best = 0
     best_epoch = 0
 
-    if len(args.checkpoint) > 0:
+    if len(args.checkpoint) > 0 or os.path.exists(saved_checkpoint_path):
         print(f"========== Loading states from {args.checkpoint} ==========")
         # Load optimizer state if it exists in the checkpoint
         if "optimizer" in checkpoint and optimizer is not None:
@@ -1328,7 +1332,7 @@ def main(args):
         if (epoch + 1) % 2 == 0 or epoch <= 10:
             torch.save(
                 save_obj,
-                os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
+                os.path.join(args.output_dir, "checkpoint_last.pth"),
             )
 
         if args.sched == "midpoint":
@@ -1339,6 +1343,8 @@ def main(args):
 
         dist.barrier()
         torch.cuda.empty_cache()
+
+        break
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -1623,9 +1629,6 @@ if __name__ == "__main__":
     # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
     # Add timestamp to output_dir so that every run is unique
-    args.output_dir = os.path.join(
-        args.output_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    )
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     json.dump(
