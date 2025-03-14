@@ -142,7 +142,7 @@ def make_dataset_val(transform, max_words=30, batch_size=128):
     return (
         wds.WebDataset(
             urls=get_val_shards(),
-            nodesplitter=wds.split_by_worker,
+            nodesplitter=wds.split_by_node,
         )
         .decode(decoder_pth)
         .map(make_sample_val)
@@ -158,24 +158,26 @@ def make_dataloader_train(trainset, batch_size=128, num_workers=4):
 
     # A resampled dataset is infinite size, but we can recreate a fixed epoch length.
     world_size = get_world_size()
-    batches_per_epoch = get_train_dataset_size() // (batch_size * world_size)
+    batches_per_epoch = get_train_dataset_size() // (batch_size * world_size)   
     trainloader.batches_per_epoch = batches_per_epoch
     trainloader = trainloader.with_epoch(batches_per_epoch)
 
     return trainloader
 
 
-def make_dataloader_val(valset):
+def make_dataloader_val(valset, batch_size=128):
     # In a IterableDataset, the batch creation is done in the dataset
-    dataloader = wds.WebLoader(valset, batch_size=None, num_workers=1)
+    dataloader = wds.WebLoader(valset, batch_size=None, num_workers=1, shuffle=False)
+    
+    world_size = get_world_size()
+    batches_per_epoch = get_val_dataset_size() // (batch_size * world_size)
+    dataloader = dataloader.with_epoch(batches_per_epoch)
 
     # Add mappings for evaluation
     size = get_val_dataset_size()
-    dataset = {
+    dataloader.dataset = {
         "txt2img": {i: [i] for i in range(size)},
         "img2txt": {i: [i] for i in range(size)},
     }
-
-    dataloader.dataset = dataset
 
     return dataloader

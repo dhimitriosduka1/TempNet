@@ -731,7 +731,7 @@ def main(args):
         [None] * 2,
     )
 
-    val_cc3m_loader = make_dataloader_val(val_cc3m_dataset)
+    val_cc3m_loader = make_dataloader_val(val_cc3m_dataset, batch_size=args.batch_size_test)
 
     # DD
     # sbu_loader = create_val_loader(
@@ -786,10 +786,10 @@ def main(args):
 
     # use kmeans to find several clusters from the dataset
     if args.find_clusters:
-
+        
         # REMOVE
         train_loader = val_cc3m_loader
-
+        
         model.eval()
 
         # image_feats = []
@@ -797,8 +797,10 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, key, _) in tqdm(enumerate(train_loader)):
-
+        for i, (image, text, key, _) in tqdm(
+            enumerate(train_loader)
+        ):
+            
             # Remove
             idx = None
             text_idx = None
@@ -868,13 +870,11 @@ def main(args):
 
         key_class_mapping = {}
         for i, key in enumerate(keys):
-            if key in key_class_mapping:
-                print(f"Duplicate key found: {key}")
             key_class_mapping[key] = labels[i]
 
-        with open(
-            f"./pickle/key_class_mapping_validation_{args.num_clusters}.pkl", "wb"
-        ) as f:
+        print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
+
+        with open(f"./pickle/key_class_mapping_validation_{args.num_clusters}_test.pkl", "wb") as f:
             pickle.dump(key_class_mapping, f)
 
         print("Saved key_class_mapping")
@@ -1231,7 +1231,10 @@ def main(args):
 
         # Load old args
         if "args" in checkpoint:
-            args = checkpoint["args"]
+            # Load the pre-loaded args
+            merged_dict = {**vars(args), **vars(checkpoint["args"])}
+            args = argparse.Namespace(**merged_dict)
+
             print(f"Loaded args from checkpoint: {args}")
 
         # Resume from the next epoch
