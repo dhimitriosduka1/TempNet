@@ -1361,21 +1361,25 @@ def evalutate(
         model_without_ddp, test_flickr_loader, tokenizer, device, args
     )
 
-    score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation_cc3m(
-        model_without_ddp, val_cc3m_loader, tokenizer, device, args
-    )
+    val_result_cc3m = {}
+    val_result_cc3m_wandb = {}
 
-    print("val_cc3m_loader.dataset:", val_cc3m_loader.dataset)
-    val_result_cc3m = itm_eval(
-        score_val_i2t_cc3m,
-        score_val_t2i_cc3m,
-        val_cc3m_loader.dataset["txt2img"],
-        val_cc3m_loader.dataset["img2txt"],
-    )
-    print("cc3m val:", val_result_cc3m)
-    val_result_cc3m_wandb = {
-        "cc3m/val/" + key: value for key, value in val_result_cc3m_wandb.items()
-    }
+    if args.evaluate_cc3m:
+        score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation_cc3m(
+            model_without_ddp, val_cc3m_loader, tokenizer, device, args
+        )
+
+        print("val_cc3m_loader.dataset:", val_cc3m_loader.dataset)
+        val_result_cc3m = itm_eval(
+            score_val_i2t_cc3m,
+            score_val_t2i_cc3m,
+            val_cc3m_loader.dataset["txt2img"],
+            val_cc3m_loader.dataset["img2txt"],
+        )
+        print("cc3m val:", val_result_cc3m)
+        val_result_cc3m_wandb = {
+            "cc3m/val/" + key: value for key, value in val_result_cc3m.items()
+        }
 
     val_result_coco = itm_eval(
         score_val_i2t_coco,
@@ -1433,7 +1437,13 @@ def evalutate(
     if utils.is_main_process():
         wandb.log(data=overall_stats, step=wandb.run.step)
 
-    return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr
+    return (
+        val_result_coco,
+        test_result_coco,
+        val_result_flickr,
+        test_result_flickr,
+        val_result_cc3m,
+    )
 
 
 if __name__ == "__main__":
@@ -1493,6 +1503,7 @@ if __name__ == "__main__":
         "--dist_url", default="env://", help="url used to set up distributed training"
     )
     parser.add_argument("--distributed", default=True, type=bool)
+    parser.add_argument("--evaluate_cc3m", action="store_true")
 
     # output path
     parser.add_argument("--output_dir", default="./output/clip_test")
