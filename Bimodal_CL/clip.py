@@ -130,18 +130,22 @@ def train(
 
         if i % 500 == 0:
             model.eval()
-            val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = (
-                evalutate(
-                    model_without_ddp=eval_objects["model_without_ddp"],
-                    val_coco_loader=eval_objects["val_coco_loader"],
-                    test_coco_loader=eval_objects["test_coco_loader"],
-                    val_flickr_loader=eval_objects["val_flickr_loader"],
-                    test_flickr_loader=eval_objects["test_flickr_loader"],
-                    val_cc3m_loader=eval_objects["val_cc3m_loader"],
-                    tokenizer=tokenizer,
-                    device=device,
-                    args=args,
-                )
+            (
+                val_result_coco,
+                test_result_coco,
+                val_result_flickr,
+                test_result_flickr,
+                val_result_cc3m,
+            ) = evaluate(
+                model_without_ddp=eval_objects["model_without_ddp"],
+                val_coco_loader=eval_objects["val_coco_loader"],
+                test_coco_loader=eval_objects["test_coco_loader"],
+                val_flickr_loader=eval_objects["val_flickr_loader"],
+                test_flickr_loader=eval_objects["test_flickr_loader"],
+                val_cc3m_loader=eval_objects["val_cc3m_loader"],
+                tokenizer=tokenizer,
+                device=device,
+                args=args,
             )
 
         model.train()
@@ -782,6 +786,10 @@ def main(args):
 
     # use kmeans to find several clusters from the dataset
     if args.find_clusters:
+
+        # REMOVE
+        train_loader = val_cc3m_loader
+
         model.eval()
 
         # image_feats = []
@@ -789,9 +797,11 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, idx, text_idx, _, __, key) in tqdm(
-            enumerate(train_loader)
-        ):
+        for i, (image, text, key, _) in tqdm(enumerate(train_loader)):
+
+            # Remove
+            idx = None
+            text_idx = None
 
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
@@ -862,10 +872,12 @@ def main(args):
                 print(f"Duplicate key found: {key}")
             key_class_mapping[key] = labels[i]
 
-        with open("key_class_mapping_v2.pkl", "wb") as f:
+        with open(
+            f"./pickle/key_class_mapping_validation_{args.num_clusters}.pkl", "wb"
+        ) as f:
             pickle.dump(key_class_mapping, f)
 
-        print("Saved key_class_mapping to key_class_mapping_v2.pkl")
+        print("Saved key_class_mapping")
 
         # img_centroids = kmeans_img.cluster_centers_
         # txt_centroids = kmeans_txt.cluster_centers_
@@ -1336,7 +1348,7 @@ def main(args):
     wandb.finish()
 
 
-def evalutate(
+def evaluate(
     model_without_ddp,
     val_coco_loader,
     test_coco_loader,
