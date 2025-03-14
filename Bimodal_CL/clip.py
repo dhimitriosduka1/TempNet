@@ -624,13 +624,25 @@ def main(args):
     utils.init_distributed_mode(args)
 
     if utils.is_main_process():
+        # Check if a run exists for the current experiment
+        run_id = None
+        wandb_run_id_path = os.path.join(args.output_dir, "wandb_id.json")
+        if os.path.exists(wandb_run_id_path):
+            with open(wandb_run_id_path, "r") as f:
+                run_id = json.load(f)["wandb_id"]
+
         wandb.init(
             project="Bimodal_CL_CC3M",
             name=args.run_name,
             resume="allow",
+            id=run_id,
             config=args,
             entity="dduka-max-planck-society",
         )
+
+        # Save wandb run id to a file
+        with open(wandb_run_id_path, "w") as f:
+            json.dump({"wandb_id": wandb.run.id}, f)
 
     device = torch.device(args.device)
 
@@ -1240,8 +1252,8 @@ def main(args):
 
         # Resume from the next epoch
         if "epoch" in checkpoint:
-            args.start_epoch = checkpoint["epoch"]
-            print(f"Epoch stored in checkpoint: {args.start_epoch}")
+            args.start_epoch = checkpoint["epoch"] + 1
+            print(f"Epoch stored in checkpoint: {checkpoint['epoch']}")
             print(f"Training will start from epoch {args.start_epoch}")
 
             # Also set the global_step in wandb
@@ -1255,7 +1267,7 @@ def main(args):
     print("Start training")
     start_time = time.time()
 
-    epoch_times = np.array()
+    epoch_times = np.array([])
 
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
@@ -1347,13 +1359,13 @@ def main(args):
         torch.cuda.empty_cache()
 
         epoch_time = time.time() - start_epoch_time
-        epoch_times.append(epoch_time)
+        epoch_times = np.append(epoch_times, epoch_time)
 
         print(f"Mean epoch time: {np.mean(epoch_times)}")
 
         # If there isn't enough remaining time for another epoch, just end the run
         threshold = 600
-        if get_remaining_slurm_time() + threshold <= np.mean(epoch_times):
+        if get_remaining_slurm_time() - threshold <= np.mean(epoch_times):
             print(
                 f"Remaining time {get_remaining_slurm_time()}s, mean epoch time {np.mean(epoch_times)}s. Breaking."
             )
