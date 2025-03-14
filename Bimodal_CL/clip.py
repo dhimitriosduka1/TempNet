@@ -58,7 +58,7 @@ from dataset.cc3m_wds import (
     make_dataloader_val,
 )
 from scheduler.temperature_scheduler import get_next_temperature
-
+from slurm import get_remaining_slurm_time
 
 def train(
     model,
@@ -1255,8 +1255,12 @@ def main(args):
     print("Start training")
     start_time = time.time()
 
+    epoch_times = np.array()
+
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
+
+        start_epoch_time = time.time()
 
         eval_objects = {
             "model_without_ddp": model_without_ddp,
@@ -1342,7 +1346,17 @@ def main(args):
         dist.barrier()
         torch.cuda.empty_cache()
 
-        if epoch == 1:
+        epoch_time = time.time() - start_epoch_time
+        epoch_times.append(epoch_time)
+
+        print(f"Mean epoch time: {np.mean(epoch_times)}")
+
+        # If there isn't enough remaining time for another epoch, just end the run
+        threshold = 600
+        if get_remaining_slurm_time() + threshold <= np.mean(epoch_times):
+            print(
+                f"Remaining time {get_remaining_slurm_time()}s, mean epoch time {np.mean(epoch_times)}s. Breaking."
+            )
             break
 
     total_time = time.time() - start_time
