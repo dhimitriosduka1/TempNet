@@ -476,10 +476,10 @@ def evaluation(model, data_loader, tokenizer, device, args):
 
 
 @torch.no_grad()
-def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
+def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt, img2supercls=[]):
 
     # Images->Text
-    ranks = np.zeros(scores_i2t.shape[0])
+    i2t_ranks = np.zeros(scores_i2t.shape[0])
     for index, score in enumerate(scores_i2t):
         inds = np.argsort(score)[::-1]
         # Score
@@ -488,30 +488,71 @@ def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
             tmp = np.where(inds == i)[0][0]
             if tmp < rank:
                 rank = tmp
-        ranks[index] = rank
+        i2t_ranks[index] = rank
 
     # Compute metrics
-    tr1 = 100.0 * len(np.where(ranks < 1)[0]) / len(ranks)
-    tr5 = 100.0 * len(np.where(ranks < 5)[0]) / len(ranks)
-    tr10 = 100.0 * len(np.where(ranks < 10)[0]) / len(ranks)
+    tr1 = 100.0 * len(np.where(i2t_ranks < 1)[0]) / len(i2t_ranks)
+    tr5 = 100.0 * len(np.where(i2t_ranks < 5)[0]) / len(i2t_ranks)
+    tr10 = 100.0 * len(np.where(i2t_ranks < 10)[0]) / len(i2t_ranks)
 
     # Text->Images
-    ranks = np.zeros(scores_t2i.shape[0])
+    t2i_ranks = np.zeros(scores_t2i.shape[0])
 
     for index, score in enumerate(scores_t2i):
         inds = np.argsort(score)[::-1]
-        ranks[index] = np.where(inds == txt2img[index])[0][0]
+        t2i_ranks[index] = np.where(inds == txt2img[index])[0][0]
 
     # Compute metrics
-    ir1 = 100.0 * len(np.where(ranks < 1)[0]) / len(ranks)
-    ir5 = 100.0 * len(np.where(ranks < 5)[0]) / len(ranks)
-    ir10 = 100.0 * len(np.where(ranks < 10)[0]) / len(ranks)
+    ir1 = 100.0 * len(np.where(t2i_ranks < 1)[0]) / len(t2i_ranks)
+    ir5 = 100.0 * len(np.where(t2i_ranks < 5)[0]) / len(t2i_ranks)
+    ir10 = 100.0 * len(np.where(t2i_ranks < 10)[0]) / len(t2i_ranks)
 
     tr_mean = (tr1 + tr5 + tr10) / 3
     ir_mean = (ir1 + ir5 + ir10) / 3
     r_mean = (tr_mean + ir_mean) / 2
 
-    eval_result = {
+    # Compute metrics for head, middle and tail classes
+    supercls_stats = {}
+    if len(img2supercls) > 0:
+        # Compute i2t
+        img2supercls = np.array(img2supercls)
+
+        superclass_to_label = {
+            0: "head",
+            1: "mid",
+            2: "tail",
+        }
+
+        for i in range(len(superclass_to_label)):
+            ranks_i2t = i2t_ranks[img2supercls == i]
+
+            print(f"Number of samples in {superclass_to_label[i]} i2t class: {len(ranks_i2t)}")
+
+            tr1_i = 100.0 * len(np.where(ranks_i2t < 1)[0]) / len(ranks_i2t)
+            tr5_i = 100.0 * len(np.where(ranks_i2t < 5)[0]) / len(ranks_i2t)
+            tr10_i = 100.0 * len(np.where(ranks_i2t < 10)[0]) / len(ranks_i2t)
+
+            label = superclass_to_label[i]
+            supercls_stats[f"{label}_txt1"] = tr1_i
+            supercls_stats[f"{label}_txt5"] = tr5_i
+            supercls_stats[f"{label}_txt10"] = tr10_i
+            supercls_stats[f"{label}_txt_mean"] = (tr1_i + tr5_i + tr10_i) / 3
+
+            ranks_t2i = t2i_ranks[img2supercls == i]
+
+            print(f"Number of samples in {superclass_to_label[i]} t2i class: {len(ranks_t2i)}")
+
+            ir1_i = 100.0 * len(np.where(ranks_t2i < 1)[0]) / len(ranks_t2i)
+            ir5_i = 100.0 * len(np.where(ranks_t2i < 5)[0]) / len(ranks_t2i)
+            ir10_i = 100.0 * len(np.where(ranks_t2i < 10)[0]) / len(ranks_t2i)
+
+            label = superclass_to_label[i]
+            supercls_stats[f"{label}_img1"] = ir1_i
+            supercls_stats[f"{label}_img5"] = ir5_i
+            supercls_stats[f"{label}_img10"] = ir10_i
+            supercls_stats[f"{label}_img_mean"] = (ir1_i + ir5_i + ir10_i) / 3
+
+    return {
         "txt_r1": tr1,
         "txt_r5": tr5,
         "txt_r10": tr10,
@@ -521,8 +562,7 @@ def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
         "img_r10": ir10,
         "img_r_mean": ir_mean,
         "r_mean": r_mean,
-    }
-    return eval_result
+    } | supercls_stats
 
 
 @torch.no_grad()
@@ -663,15 +703,23 @@ def main(args):
         [None] * 2,
     )
 
-    val_cc3m_loader = torch.utils.data.DataLoader(
-        dataset=val_cc3m_dataset,
-        batch_size=args.batch_size_test,
-        num_workers=8,
-        sampler=torch.utils.data.distributed.DistributedSampler(
-            val_cc3m_dataset, shuffle=False, drop_last=False
-        ),
-        pin_memory=True,
-    )
+    val_cc3m_loader = create_val_loader(
+        [val_cc3m_dataset],
+        [None],
+        [args.batch_size_test],
+        [8],
+        [None],
+    )[0]
+
+    # val_cc3m_loader = torch.utils.data.DataLoader(
+    #     dataset=val_cc3m_dataset,
+    #     batch_size=args.batch_size_test,
+    #     num_workers=8,
+    #     sampler=torch.utils.data.distributed.DistributedSampler(
+    #         val_cc3m_dataset, shuffle=False, drop_last=False
+    #     ),
+    #     pin_memory=True,
+    # )
 
     # DD
     # sbu_loader = create_val_loader(
@@ -1329,6 +1377,7 @@ def evaluate(
         score_val_t2i_cc3m,
         val_cc3m_loader.dataset.txt2img,
         val_cc3m_loader.dataset.img2txt,
+        val_cc3m_loader.dataset.img2superclass,
     )
     print("cc3m val:", val_result_cc3m)
     val_result_cc3m_wandb = {
@@ -1586,7 +1635,7 @@ if __name__ == "__main__":
     json.dump(
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
-    
+
     try:
         main(args)
     except Exception as e:

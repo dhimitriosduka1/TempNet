@@ -202,11 +202,13 @@ class CC3M_Val_Dataset(Dataset):
         self.image = []
         self.txt2img = {}
         self.img2txt = {}
+        self.img2superclass = []
 
         txt_id = 0
         for img_id, ann in enumerate(self.ann):
             self.image.append(ann["image"])
             self.img2txt[img_id] = []
+            self.img2superclass.append(self.cls2supercls[self.img2cls[ann["image"]]])
 
             # Preprocess caption
             caption_path = os.path.join(self.root, ann["caption"])
@@ -219,6 +221,10 @@ class CC3M_Val_Dataset(Dataset):
             self.txt2img[txt_id] = img_id
             txt_id += 1
 
+        print(f"Number of samples for head classes: {len([i for i in self.img2superclass if i == 0])}")
+        print(f"Number of samples for mid classes: {len([i for i in self.img2superclass if i == 1])}")
+        print(f"Number of samples for tail classes: {len([i for i in self.img2superclass if i == 2])}")
+
     def __len__(self):
         return len(self.ann)
 
@@ -230,7 +236,6 @@ class CC3M_Val_Dataset(Dataset):
         image = self.transform(image)
 
         class_ = torch.tensor((self.img2cls[image_id]))
-        superclass_ = torch.tensor(self.cls2supercls[class_])
 
         return {
             "image": image,
@@ -238,7 +243,6 @@ class CC3M_Val_Dataset(Dataset):
             "class_": class_,
             "index": index,
             "key": image_id,
-            "superclass": superclass_,
         }
 
     def _setup_superclasses(self, img2cls):
