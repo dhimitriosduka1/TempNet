@@ -186,11 +186,14 @@ def make_dataloader_val(valset, batch_size=128):
 
 # A non-wds version of the validation dataset
 class CC3M_Val_Dataset(Dataset):
-    def __init__(self, ann_file, transform, root, max_words=30):
+    def __init__(self, ann_file, img2cls_file, transform, root, max_words=30):
         self.ann = json.load(open(ann_file, "r"))
         self.transform = transform
         self.root = root
         self.max_words = max_words
+        self.img2cls_file = img2cls_file
+
+        self.img2cls = pickle.load(open(self.img2cls_file, "rb"))
 
         self.text = []
         self.image = []
@@ -217,8 +220,17 @@ class CC3M_Val_Dataset(Dataset):
         return len(self.ann)
 
     def __getitem__(self, index):
-        image_path = os.path.join(self.root, self.ann[index]["image"])
+        image_id = self.ann[index]["image"]
+        image_path = os.path.join(self.root, image_id)
         image = torch.load(image_path, map_location="cpu", weights_only=True)
         image = Image.fromarray(image.numpy()).convert("RGB")
         image = self.transform(image)
-        return image, index
+
+        class_ = torch.tensor((self.img2cls[image_id]))
+
+        return {
+            "image": image,
+            "caption": self.text[index],
+            "class_": class_,
+            "index": index,
+        }
