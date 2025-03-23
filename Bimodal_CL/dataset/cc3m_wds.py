@@ -8,6 +8,7 @@ from dataset.utils import pre_caption
 import PIL.Image as Image
 import torch.distributed as dist
 from torch.utils.data import Dataset
+from collections import Counter
 
 from scheduler.temperature_scheduler import get_per_class_temperature
 
@@ -160,7 +161,7 @@ def make_dataloader_train(trainset, batch_size=128, num_workers=4):
 
     # A resampled dataset is infinite size, but we can recreate a fixed epoch length.
     world_size = get_world_size()
-    batches_per_epoch = get_train_dataset_size() // (batch_size * world_size)   
+    batches_per_epoch = get_train_dataset_size() // (batch_size * world_size)
     trainloader.batches_per_epoch = batches_per_epoch
     trainloader = trainloader.with_epoch(batches_per_epoch)
 
@@ -170,7 +171,7 @@ def make_dataloader_train(trainset, batch_size=128, num_workers=4):
 def make_dataloader_val(valset, batch_size=128):
     # In a IterableDataset, the batch creation is done in the dataset
     dataloader = wds.WebLoader(valset, batch_size=None, num_workers=4, shuffle=False)
-    
+
     world_size = get_world_size()
     batches_per_epoch = get_val_dataset_size() // (batch_size * world_size)
     dataloader = dataloader.with_epoch(batches_per_epoch)
@@ -184,6 +185,7 @@ def make_dataloader_val(valset, batch_size=128):
 
     return dataloader
 
+
 # A non-wds version of the validation dataset
 class CC3M_Val_Dataset(Dataset):
     def __init__(self, ann_file, img2cls_file, transform, root, max_words=30):
@@ -194,6 +196,7 @@ class CC3M_Val_Dataset(Dataset):
         self.img2cls_file = img2cls_file
 
         self.img2cls = pickle.load(open(self.img2cls_file, "rb"))
+        self.cls2supercls = self._setup_superclasses(self.img2cls)
 
         self.text = []
         self.image = []
@@ -227,10 +230,35 @@ class CC3M_Val_Dataset(Dataset):
         image = self.transform(image)
 
         class_ = torch.tensor((self.img2cls[image_id]))
+        superclass_ = torch.tensor(self.cls2supercls[class_])
 
         return {
             "image": image,
             "caption": self.text[index],
             "class_": class_,
             "index": index,
+            "key": image_id,
+            "superclass": superclass_,
         }
+
+    def _setup_superclasses(self, img2cls):
+        # Create a mapping from class to superclass
+        # 0 -> head class
+        # 1 -> mid class
+        # 2 -> tail class
+        counter = Counter(img2cls.values()).most_common()
+        classes = [int(class_) for class_, _ in counter]
+
+        assert len(classes) % 3 == 0, "Number of classes should be divisible by 3"
+
+        interval = len(classes) // 3
+        superclasses = {}
+        for i, class_ in enumerate(classes):
+            if i < interval:
+                superclasses[class_] = 0
+            elif i < 2 * interval:
+                superclasses[class_] = 1
+            else:
+                superclasses[class_] = 2
+
+        return superclasses
