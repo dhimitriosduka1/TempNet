@@ -231,4 +231,7 @@ class re_eval_dataset(Dataset):
         else:
             image = torchvision.transforms.ToTensor()(image)
 
-        return image, index
+        return {
+            "image": image,
+            "index": index,
+        }
