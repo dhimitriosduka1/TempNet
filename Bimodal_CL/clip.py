@@ -51,8 +51,13 @@ from tqdm import tqdm
 
 from sklearn.cluster import KMeans
 
-from dataset.cc3m_wds import make_dataloader_train, get_dataset_size
+from dataset.cc3m_wds import (
+    make_dataloader_train,
+    get_train_dataset_size,
+    get_val_dataset_size,
+)
 from scheduler.temperature_scheduler import get_next_temperature
+from slurm import get_remaining_slurm_time
 
 
 def train(
@@ -125,17 +130,22 @@ def train(
 
         if i % 500 == 0:
             model.eval()
-            val_result_coco, test_result_coco, val_result_flickr, test_result_flickr = (
-                evalutate_on_flicker_and_mscoco(
-                    model_without_ddp=eval_objects["model_without_ddp"],
-                    val_coco_loader=eval_objects["val_coco_loader"],
-                    test_coco_loader=eval_objects["test_coco_loader"],
-                    val_flickr_loader=eval_objects["val_flickr_loader"],
-                    test_flickr_loader=eval_objects["test_flickr_loader"],
-                    tokenizer=tokenizer,
-                    device=device,
-                    args=args,
-                )
+            (
+                val_result_coco,
+                test_result_coco,
+                val_result_flickr,
+                test_result_flickr,
+                val_result_cc3m,
+            ) = evaluate(
+                model_without_ddp=eval_objects["model_without_ddp"],
+                val_coco_loader=eval_objects["val_coco_loader"],
+                test_coco_loader=eval_objects["test_coco_loader"],
+                val_flickr_loader=eval_objects["val_flickr_loader"],
+                test_flickr_loader=eval_objects["test_flickr_loader"],
+                val_cc3m_loader=eval_objects["val_cc3m_loader"],
+                tokenizer=tokenizer,
+                device=device,
+                args=args,
             )
 
         model.train()
@@ -269,6 +279,7 @@ def train(
         test_result_coco,
         val_result_flickr,
         test_result_flickr,
+        val_result_cc3m,
         {
             k: "{:.3f}".format(meter.global_avg)
             for k, meter in metric_logger.meters.items()
@@ -414,7 +425,10 @@ def evaluation(model, data_loader, tokenizer, device, args):
     text_embeds = torch.cat(text_embeds, dim=0)
 
     image_embeds = []
-    for image, img_id in data_loader:
+    # for image, img_id in data_loader:
+    for batch in data_loader:
+        image = batch["image"]
+
         image = image.to(device)
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
@@ -459,7 +473,6 @@ def evaluation(model, data_loader, tokenizer, device, args):
     print("Evaluation time {}".format(total_time_str))
 
     return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy()
-
 
 @torch.no_grad()
 def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
@@ -530,13 +543,25 @@ def main(args):
     utils.init_distributed_mode(args)
 
     if utils.is_main_process():
+        # Check if a run exists for the current experiment
+        run_id = None
+        wandb_run_id_path = os.path.join(args.output_dir, "wandb_id.json")
+        if os.path.exists(wandb_run_id_path):
+            with open(wandb_run_id_path, "r") as f:
+                run_id = json.load(f)["wandb_id"]
+
         wandb.init(
             project="Bimodal_CL_CC3M",
             name=args.run_name,
             resume="allow",
+            id=run_id,
             config=args,
             entity="dduka-max-planck-society",
         )
+
+        # Save wandb run id to a file
+        with open(wandb_run_id_path, "w") as f:
+            json.dump({"wandb_id": wandb.run.id}, f)
 
     device = torch.device(args.device)
 
@@ -557,20 +582,30 @@ def main(args):
 
     # DD
     # args.data_number = len(train_dataset)
-    args.data_number = get_dataset_size()
+    args.data_number = get_train_dataset_size()
 
     val_coco_dataset, test_coco_dataset = create_val_dataset(
         "re", args, args.val_coco_file, args.coco_image_root, args.test_coco_file
     )
+
     val_flickr_dataset, test_flickr_dataset = create_val_dataset(
         "re", args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file
     )
 
+    # For loading cc3m, we need to set the load_cc3m_val flag to True
+    val_cc3m_dataset = create_val_dataset(
+        dataset=None,
+        args=args,
+        val_file=None,
+        val_image_root=None,
+        load_cc3m_val=True,
+    )
     # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
 
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
+    print("len of cc3m val:", get_val_dataset_size())
 
     # print("len of sbu data:", len(sbu_dataset))
 
@@ -618,12 +653,23 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
+
     val_flickr_loader, test_flickr_loader = create_val_loader(
         [val_flickr_dataset, test_flickr_dataset],
         [None, None],
         [args.batch_size_test] * 2,
         [8] * 2,
         [None] * 2,
+    )
+
+    val_cc3m_loader = torch.utils.data.DataLoader(
+        dataset=val_cc3m_dataset,
+        batch_size=args.batch_size_test,
+        num_workers=8,
+        sampler=torch.utils.data.distributed.DistributedSampler(
+            val_cc3m_dataset, shuffle=False, drop_last=False
+        ),
+        pin_memory=True,
     )
 
     # DD
@@ -686,10 +732,9 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, idx, text_idx, _, __, key) in tqdm(
+        for i, (image, text, key, _) in tqdm(
             enumerate(train_loader)
         ):
-
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
                 text,
@@ -755,14 +800,14 @@ def main(args):
 
         key_class_mapping = {}
         for i, key in enumerate(keys):
-            if key in key_class_mapping:
-                print(f"Duplicate key found: {key}")
             key_class_mapping[key] = labels[i]
 
-        with open("key_class_mapping_v2.pkl", "wb") as f:
+        print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
+
+        with open(f"./pickle/key_class_mapping_validation_{args.num_clusters}_test.pkl", "wb") as f:
             pickle.dump(key_class_mapping, f)
 
-        print("Saved key_class_mapping to key_class_mapping_v2.pkl")
+        print("Saved key_class_mapping")
 
         # img_centroids = kmeans_img.cluster_centers_
         # txt_centroids = kmeans_txt.cluster_centers_
@@ -784,7 +829,8 @@ def main(args):
         return
 
     if len(args.checkpoint) > 0:
-        checkpoint = torch.load(args.checkpoint, map_location="cpu")
+        checkpoint_path = args.checkpoint or saved_checkpoint_path
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state_dict = checkpoint["model"]
         model.load_state_dict(state_dict, strict=False)
         print("Load checkpoint from %s" % args.checkpoint)
@@ -1116,26 +1162,29 @@ def main(args):
 
         # Load old args
         if "args" in checkpoint:
-            args = checkpoint["args"]
+            # Load the pre-loaded args
+            merged_dict = {**vars(args), **vars(checkpoint["args"])}
+            args = argparse.Namespace(**merged_dict)
+
             print(f"Loaded args from checkpoint: {args}")
 
         # Resume from the next epoch
         if "epoch" in checkpoint:
-            args.start_epoch = checkpoint["epoch"]
-            print(f"Epoch stored in checkpoint: {args.start_epoch}")
+            args.start_epoch = checkpoint["epoch"] + 1
+            print(f"Epoch stored in checkpoint: {checkpoint['epoch']}")
             print(f"Training will start from epoch {args.start_epoch}")
 
-            # Also set the global_step in wandb
-            if utils.is_main_process():
-                wandb.run._step = wandb.run._starting_step = args.start_epoch * train_loader.batches_per_epoch
-
         print(f"========== Loaded states from {args.checkpoint} ==========")
-            
 
     print("Start training")
     start_time = time.time()
+
+    epoch_times = np.array([])
+
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
+
+        start_epoch_time = time.time()
 
         eval_objects = {
             "model_without_ddp": model_without_ddp,
@@ -1143,6 +1192,7 @@ def main(args):
             "test_coco_loader": test_coco_loader,
             "val_flickr_loader": val_flickr_loader,
             "test_flickr_loader": test_flickr_loader,
+            "val_cc3m_loader": val_cc3m_loader,
         }
 
         (
@@ -1150,6 +1200,7 @@ def main(args):
             test_result_coco,
             val_result_flickr,
             test_result_flickr,
+            val_result_cc3m,
             train_stats,
         ) = train(
             model,
@@ -1199,17 +1250,16 @@ def main(args):
             "args": args,
             "epoch": epoch,
         }
-        
+
         if val_result_coco["r_mean"] > best:
             torch.save(save_obj, os.path.join(args.output_dir, "checkpoint_best.pth"))
             best = val_result_coco["r_mean"]
             best_epoch = epoch
 
-        if (epoch + 1) % 2 == 0 or epoch <= 10:
-            torch.save(
-                save_obj,
-                os.path.join(args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"),
-            )
+        torch.save(
+            save_obj,
+            os.path.join(args.output_dir, "checkpoint_last.pth"),
+        )
 
         if args.sched == "midpoint":
             # This scheduler just needs the number of epochs and nothing else
@@ -1219,6 +1269,19 @@ def main(args):
 
         dist.barrier()
         torch.cuda.empty_cache()
+
+        epoch_time = time.time() - start_epoch_time
+        epoch_times = np.append(epoch_times, epoch_time)
+
+        print(f"Mean epoch time: {np.mean(epoch_times)}")
+
+        # If there isn't enough remaining time for another epoch, just end the run
+        threshold = 600
+        if get_remaining_slurm_time() - threshold <= np.mean(epoch_times):
+            print(
+                f"Remaining time {get_remaining_slurm_time()}s, mean epoch time {np.mean(epoch_times)}s. Breaking."
+            )
+            break
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -1231,12 +1294,13 @@ def main(args):
     wandb.finish()
 
 
-def evalutate_on_flicker_and_mscoco(
+def evaluate(
     model_without_ddp,
     val_coco_loader,
     test_coco_loader,
     val_flickr_loader,
     test_flickr_loader,
+    val_cc3m_loader,
     tokenizer,
     device,
     args,
@@ -1254,6 +1318,21 @@ def evalutate_on_flicker_and_mscoco(
     score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
         model_without_ddp, test_flickr_loader, tokenizer, device, args
     )
+
+    score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation(
+        model_without_ddp, val_cc3m_loader, tokenizer, device, args
+    )
+    
+    val_result_cc3m = itm_eval(
+        score_val_i2t_cc3m,
+        score_val_t2i_cc3m,
+        val_cc3m_loader.dataset.txt2img,
+        val_cc3m_loader.dataset.img2txt,
+    )
+    print("cc3m val:", val_result_cc3m)
+    val_result_cc3m_wandb = {
+        "cc3m/val/" + key: value for key, value in val_result_cc3m.items()
+    }
 
     val_result_coco = itm_eval(
         score_val_i2t_coco,
@@ -1305,12 +1384,19 @@ def evalutate_on_flicker_and_mscoco(
         | test_result_coco_wandb
         | val_result_flickr_wandb
         | test_result_flickr_wandb
+        | val_result_cc3m_wandb
     )
 
     if utils.is_main_process():
         wandb.log(data=overall_stats, step=wandb.run.step)
 
-    return val_result_coco, test_result_coco, val_result_flickr, test_result_flickr
+    return (
+        val_result_coco,
+        test_result_coco,
+        val_result_flickr,
+        test_result_flickr,
+        val_result_cc3m,
+    )
 
 
 if __name__ == "__main__":
@@ -1370,6 +1456,7 @@ if __name__ == "__main__":
         "--dist_url", default="env://", help="url used to set up distributed training"
     )
     parser.add_argument("--distributed", default=True, type=bool)
+    parser.add_argument("--evaluate_cc3m", action="store_true")
 
     # output path
     parser.add_argument("--output_dir", default="./output/clip_test")
@@ -1451,6 +1538,11 @@ if __name__ == "__main__":
     parser.add_argument("--pct_tau_max", default=0.02, type=float)
     parser.add_argument("--offset", default=0.0, type=float)
 
+    # cc3m
+    parser.add_argument("--cc3m_ann_file", default="/BS/dduka/work/databases/cc3m/validation/annotations.json")
+    parser.add_arugment("--cc3m_img2cls_file", default="/BS/dduka/work/databases/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl")
+    parser.add_argument("--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/")
+
     args = parser.parse_args()
 
     if args.check_samples_tau:
@@ -1474,9 +1566,12 @@ if __name__ == "__main__":
     # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
     # Add timestamp to output_dir so that every run is unique
-    args.output_dir = os.path.join(
-        args.output_dir, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-    )
+
+    saved_checkpoint_path = os.path.join(args.output_dir, "checkpoint_last.pth")
+
+    if os.path.exists(saved_checkpoint_path):
+        args.checkpoint = saved_checkpoint_path
+
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     json.dump(
