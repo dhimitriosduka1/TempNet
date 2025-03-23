@@ -5,13 +5,10 @@ from PIL import Image, ImageFilter, ImageOps
 import random
 
 from dataset.caption_dataset import (
-    re_train_dataset,
     re_eval_dataset,
-    ImageNet100Dataset
 )
 from dataset.randaugment import RandomAugment
-from dataset.cc3m_wds import make_dataset_train
-# from dataset.cc3m import make_dataset_train
+from dataset.cc3m_wds import make_dataset_train, CC3M_Val_Dataset
 
 
 class GaussianBlur(object):
@@ -71,22 +68,11 @@ def create_train_dataset(dataset, args, use_test_transform=False):
         ]
     )
 
-    # DD
-    # test_transform = transforms.Compose(
-    #     [
-    #         transforms.Resize(
-    #             (args.image_res, args.image_res), interpolation=Image.BICUBIC
-    #         ),
-    #         transforms.ToTensor(),
-    #         normalize,
-    #     ]
-    # )
-
     return make_dataset_train(
         transform=train_transform,
         batch_size=args.batch_size_train,
         tau_min=args.pct_tau_min,
-        tau_max=args.pct_tau_max
+        tau_max=args.pct_tau_max,
     )
 
     # DD
@@ -113,7 +99,9 @@ def create_train_dataset(dataset, args, use_test_transform=False):
     #     assert 0, dataset + " is not supported."
 
 
-def create_val_dataset(dataset, args, val_file, val_image_root, test_file=None):
+def create_val_dataset(
+    dataset, args, val_file, val_image_root, test_file=None, load_cc3m_val=False
+):
 
     normalize = transforms.Normalize(
         (0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)
@@ -128,6 +116,14 @@ def create_val_dataset(dataset, args, val_file, val_image_root, test_file=None):
             normalize,
         ]
     )
+
+    if load_cc3m_val:
+        return CC3M_Val_Dataset(
+            ann_file=args.cc3m_ann_file,
+            img2cls_file=args.cc3m_img2cls_file,
+            transform=test_transform,
+            root=args.cc3m_val_root,
+        )
 
     if dataset == "re":
         val_dataset = re_eval_dataset(val_file, test_transform, val_image_root)
