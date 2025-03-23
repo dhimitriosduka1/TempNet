@@ -474,6 +474,7 @@ def evaluation(model, data_loader, tokenizer, device, args):
 
     return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy()
 
+
 @torch.no_grad()
 def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt):
 
@@ -732,9 +733,7 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, key, _) in tqdm(
-            enumerate(train_loader)
-        ):
+        for i, (image, text, key, _) in tqdm(enumerate(train_loader)):
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
                 text,
@@ -804,7 +803,9 @@ def main(args):
 
         print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
 
-        with open(f"./pickle/key_class_mapping_validation_{args.num_clusters}_test.pkl", "wb") as f:
+        with open(
+            f"./pickle/key_class_mapping_validation_{args.num_clusters}_test.pkl", "wb"
+        ) as f:
             pickle.dump(key_class_mapping, f)
 
         print("Saved key_class_mapping")
@@ -1322,7 +1323,7 @@ def evaluate(
     score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation(
         model_without_ddp, val_cc3m_loader, tokenizer, device, args
     )
-    
+
     val_result_cc3m = itm_eval(
         score_val_i2t_cc3m,
         score_val_t2i_cc3m,
@@ -1539,9 +1540,17 @@ if __name__ == "__main__":
     parser.add_argument("--offset", default=0.0, type=float)
 
     # cc3m
-    parser.add_argument("--cc3m_ann_file", default="/BS/dduka/work/databases/cc3m/validation/annotations.json")
-    parser.add_arugment("--cc3m_img2cls_file", default="/BS/dduka/work/databases/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl")
-    parser.add_argument("--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/")
+    parser.add_argument(
+        "--cc3m_ann_file",
+        default="/BS/dduka/work/databases/cc3m/validation/annotations.json",
+    )
+    parser.add_argument(
+        "--cc3m_img2cls_file",
+        default="/BS/dduka/work/databases/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl",
+    )
+    parser.add_argument(
+        "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
+    )
 
     args = parser.parse_args()
 
