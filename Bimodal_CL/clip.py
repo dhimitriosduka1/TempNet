@@ -1586,8 +1586,7 @@ if __name__ == "__main__":
     json.dump(
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
-    shutil.copy("./models/losses.py", args.output_dir)
-
+    
     try:
         main(args)
     except Exception as e:
