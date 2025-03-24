@@ -124,7 +124,7 @@ def train(
 
     period = (args.epochs * data_loader.batches_per_epoch) / 5.0
 
-    for i, (image, text, idx, text_idx, _, temperature, __) in enumerate(
+    for i, (images, texts, idx, text_idx, _, temperature, __) in enumerate(
         metric_logger.log_every(data_loader, print_freq, header)
     ):
 
@@ -155,16 +155,22 @@ def train(
                 args.lr_temp_net * 0.9**epoch
             )  # exp decay
 
-        image = image.to(device, non_blocking=True)
+        # Images is an array of images containing the original and one augmentation
+        images = [image.to(device, non_blocking=True) for image in images]
+
         idx = idx.to(device, non_blocking=True)
         text_idx = text_idx.to(device, non_blocking=True)
-        text_input = tokenizer(
-            text,
-            padding="max_length",
-            truncation=True,
-            max_length=30,
-            return_tensors="pt",
-        ).to(device)
+
+        # Texts is an array of captions containing the original and one augmentation
+        text_inputs = [
+            tokenizer(
+                text,
+                padding="max_length",
+                truncation=True,
+                max_length=30,
+                return_tensors="pt",
+            ).to(device) for text in texts
+        ]
 
         if grad_scaler is None:
             assert 0
@@ -188,8 +194,8 @@ def train(
                     model.module.criterion.set_temperature(updated_temperature)
 
                 loss_term, info_dict = model(
-                    image,
-                    text_input,
+                    images,
+                    text_inputs,
                     idx=idx,
                     text_idx=text_idx,
                     epoch=epoch,
@@ -1605,6 +1611,10 @@ if __name__ == "__main__":
         "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
     )
     parser.add_argument("--cc3m_extended_captions_path", default="")
+
+    # Losses
+    parser.add_argument("--enable_i2i_loss", action="store_true")
+    parser.add_argument("--enbale_t2t_loss", action="store_true")
 
     args = parser.parse_args()
 

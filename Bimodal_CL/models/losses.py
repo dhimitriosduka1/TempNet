@@ -55,6 +55,9 @@ class CLIP_Loss(nn.Module):
         self.temperature = temperature
 
     def forward(self, image_features, text_features, image_idx=None, text_idx=None):
+        image_features = image_features[0]
+        text_features = text_features[0]
+
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)

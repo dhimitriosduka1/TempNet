@@ -70,8 +70,7 @@ def create_train_dataset(dataset, args, use_test_transform=False):
 
     return make_dataset_train(
         transform=train_transform,
-        batch_size=args.batch_size_train,
-        cc3m_extended_captions_path=args.cc3m_extended_captions_path,
+        args=args
     )
 
     # DD

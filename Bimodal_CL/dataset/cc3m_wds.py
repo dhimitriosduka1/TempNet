@@ -68,39 +68,44 @@ def decoder_pth(key, value):
         image = Image.fromarray(image.numpy()).convert("RGB")
         return image
 
+# I want to add data augmentations for image, text or both and use them in the loss
 
 def make_dataset_train(
     transform,
+    args,
     max_words=30,
-    cache_dir=None,
-    batch_size=128,
-    cc3m_extended_captions_path="",
 ):
     def load_extended_captions():
-        with open(cc3m_extended_captions_path, "r") as f:
+        with open(args.cc3m_extended_captions_path, "r") as f:
             data = json.load(f)
 
             # Key is in the format shardindex_samplexxx_yyy => samplexxx_yyy
             # We need to remove the shardindex_ part
             return {k.split("_", 1)[1]: v for k, v in data.items()}
 
-    def make_sample_train(sample, extended_captions=None):
-        image = sample["image.pth"]
+    def make_sample_train(sample, extended_captions=None, enable_i2i_loss=False, enable_t2t_loss=False):
+        if enable_t2t_loss and extended_captions == "":
+            raise ValueError("Extended captions must be provided when enable_t2t_loss = True")
 
         key = sample["__key__"]
+
+        images = [transform(sample["image.pth"])]
+
+        captions = [sample["metadata.pyd"]["caption"]]
         if extended_captions is not None:
+            nr_samples = 2 if enable_t2t_loss else 1
             # Sample uniformly from a list of captions
             candidates = [extended_captions[key]["caption"]] + extended_captions[key][
                 "paraphrases"
             ]
-            caption = random.choice(candidates)
-        else:
-            caption = sample["metadata.pyd"]["caption"]
+            captions = random.sample(candidates, nr_samples) # This always returns a list
 
+        captions = [pre_caption(caption=caption, max_words=max_words) for caption in captions]
+        
         # TODO: Refactor the return object
         return (
-            transform(image),
-            pre_caption(caption=caption, max_words=max_words),
+            images,
+            captions,
             torch.tensor(-1.0),
             torch.tensor(-1.0),
             torch.tensor(-1.0),
@@ -112,12 +117,12 @@ def make_dataset_train(
         urls=get_train_shards(),
         resampled=True,
         shardshuffle=True,
-        cache_dir=cache_dir,
+        cache_dir=None,
         nodesplitter=wds.split_by_worker,
     )
 
     extended_captions = None
-    if cc3m_extended_captions_path:
+    if args.cc3m_extended_captions_path != "":
         extended_captions = load_extended_captions()
 
     train_set = (
@@ -125,7 +130,7 @@ def make_dataset_train(
         .decode(decoder_pth)
         .map(lambda sample: make_sample_train(sample, extended_captions))
     )
-    train_set = train_set.batched(batch_size)
+    train_set = train_set.batched(args.batch_size_train)
     return train_set
 
 
