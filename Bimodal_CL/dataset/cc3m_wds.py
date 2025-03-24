@@ -3,6 +3,7 @@ import os
 import json
 import torch
 import pickle
+import random
 import webdataset as wds
 from dataset.utils import pre_caption
 import PIL.Image as Image
@@ -73,30 +74,37 @@ def make_dataset_train(
     max_words=30,
     cache_dir=None,
     batch_size=128,
-    tau_min=0.01,
-    tau_max=0.02,
+    cc3m_extended_captions_path="",
 ):
-    def load_precomputed_classes(
-        path="/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/caption_features_without_tensors.pkl",
-    ):
-        with open(path, "rb") as file:
-            return pickle.load(file)
+    def load_extended_captions():
+        with open(cc3m_extended_captions_path, "r") as f:
+            data = json.load(f)
 
-    # TODO: Change `torch.tensor(-1.0)` to correct values when using different loss than CLIP
-    def make_sample_train(sample, precomputed_classes, per_class_temperature):
+            # Key is in the format shardindex_samplexxx_yyy => samplexxx_yyy
+            # We need to remove the shardindex_ part
+            return {k.split("_", 1)[1]: v for k, v in data.items()}
+
+    def make_sample_train(sample, extended_captions=None):
         image = sample["image.pth"]
-        caption = sample["metadata.pyd"]["caption"]
-        key = sample["__key__"]
-        class_ = precomputed_classes[key]["class_"]
-        temperature = per_class_temperature[class_]
 
+        key = sample["__key__"]
+        if extended_captions is not None:
+            # Sample uniformly from a list of captions
+            candidates = [extended_captions[key]["caption"]] + extended_captions[key][
+                "paraphrases"
+            ]
+            caption = random.choice(candidates)
+        else:
+            caption = sample["metadata.pyd"]["caption"]
+
+        # TODO: Refactor the return object
         return (
             transform(image),
             pre_caption(caption=caption, max_words=max_words),
             torch.tensor(-1.0),
             torch.tensor(-1.0),
-            torch.tensor(class_),
-            torch.tensor(temperature),
+            torch.tensor(-1.0),
+            torch.tensor(-1.0),
             key,
         )
 
@@ -108,21 +116,14 @@ def make_dataset_train(
         nodesplitter=wds.split_by_worker,
     )
 
-    precomputed_classes = load_precomputed_classes()
-    per_class_temperature = get_per_class_temperature(
-        classes_=precomputed_classes["metadata"]["classes"],
-        tau_min=tau_min,
-        tau_max=tau_max,
-    )
+    extended_captions = None
+    if cc3m_extended_captions_path:
+        extended_captions = load_extended_captions()
 
     train_set = (
         train_set.shuffle(1000)
         .decode(decoder_pth)
-        .map(
-            lambda sample: make_sample_train(
-                sample, precomputed_classes, per_class_temperature
-            )
-        )
+        .map(lambda sample: make_sample_train(sample, extended_captions))
     )
     train_set = train_set.batched(batch_size)
     return train_set
@@ -221,9 +222,15 @@ class CC3M_Val_Dataset(Dataset):
             self.txt2img[txt_id] = img_id
             txt_id += 1
 
-        print(f"Number of samples for head classes: {len([i for i in self.img2superclass if i == 0])}")
-        print(f"Number of samples for mid classes: {len([i for i in self.img2superclass if i == 1])}")
-        print(f"Number of samples for tail classes: {len([i for i in self.img2superclass if i == 2])}")
+        print(
+            f"Number of samples for head classes: {len([i for i in self.img2superclass if i == 0])}"
+        )
+        print(
+            f"Number of samples for mid classes: {len([i for i in self.img2superclass if i == 1])}"
+        )
+        print(
+            f"Number of samples for tail classes: {len([i for i in self.img2superclass if i == 2])}"
+        )
 
     def __len__(self):
         return len(self.ann)

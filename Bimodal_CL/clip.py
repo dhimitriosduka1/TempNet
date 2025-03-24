@@ -526,7 +526,9 @@ def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt, img2supercls=[]):
         for i in range(len(superclass_to_label)):
             ranks_i2t = i2t_ranks[img2supercls == i]
 
-            print(f"Number of samples in {superclass_to_label[i]} i2t class: {len(ranks_i2t)}")
+            print(
+                f"Number of samples in {superclass_to_label[i]} i2t class: {len(ranks_i2t)}"
+            )
 
             tr1_i = 100.0 * len(np.where(ranks_i2t < 1)[0]) / len(ranks_i2t)
             tr5_i = 100.0 * len(np.where(ranks_i2t < 5)[0]) / len(ranks_i2t)
@@ -540,7 +542,9 @@ def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt, img2supercls=[]):
 
             ranks_t2i = t2i_ranks[img2supercls == i]
 
-            print(f"Number of samples in {superclass_to_label[i]} t2i class: {len(ranks_t2i)}")
+            print(
+                f"Number of samples in {superclass_to_label[i]} t2i class: {len(ranks_t2i)}"
+            )
 
             ir1_i = 100.0 * len(np.where(ranks_t2i < 1)[0]) / len(ranks_t2i)
             ir5_i = 100.0 * len(np.where(ranks_t2i < 5)[0]) / len(ranks_t2i)
@@ -1600,6 +1604,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
     )
+    parser.add_argument("--cc3m_extended_captions_path", default="")
 
     args = parser.parse_args()
 
