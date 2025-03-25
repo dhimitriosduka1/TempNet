@@ -1325,6 +1325,12 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write(json.dumps(log_stats) + "\n")
 
+        if args.sched == "midpoint":
+            # This scheduler just needs the number of epochs and nothing else
+            lr_scheduler.step(epoch)
+        else:
+            lr_scheduler.step(epoch + warmup_steps + 1)
+
         save_obj = {
             "model": model_without_ddp.state_dict(),
             "optimizer": optimizer.state_dict(),
@@ -1342,12 +1348,6 @@ def main(args):
             save_obj,
             os.path.join(args.output_dir, "checkpoint_last.pth"),
         )
-
-        if args.sched == "midpoint":
-            # This scheduler just needs the number of epochs and nothing else
-            lr_scheduler.step(epoch)
-        else:
-            lr_scheduler.step(epoch + warmup_steps + 1)
 
         dist.barrier()
         torch.cuda.empty_cache()
