@@ -1638,7 +1638,7 @@ if __name__ == "__main__":
     # Losses
     parser.add_argument("--enable_i2i_loss", action="store_true")
     parser.add_argument("--enable_t2t_loss", action="store_true")
-    parser.add_arugmnet("--i2i_loss_weight", default=1.0, type=float)
+    parser.add_argument("--i2i_loss_weight", default=1.0, type=float)
     parser.add_argument("--t2t_loss_weight", default=1.0, type=float)
 
     args = parser.parse_args()
