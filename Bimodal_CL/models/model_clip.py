@@ -141,8 +141,8 @@ class CLIP(nn.Module):
 
     def forward(
         self,
-        images,
-        texts,
+        image,
+        text,
         idx,
         text_idx,
         epoch,
@@ -150,7 +150,6 @@ class CLIP(nn.Module):
         return_feat=False,
         per_sample_temperature=None,
     ):
-        # NOTE: Image and text are now arrays containing also augmentations
         if self.learnable_temp:
             with torch.no_grad():
                 if not self.personalized_tau:
@@ -159,23 +158,18 @@ class CLIP(nn.Module):
                     self.image_temp.clamp_(0.001, 0.5)
                     self.text_temp.clamp_(0.001, 0.5)
 
-        image_features = []
-        for image in images:
-            image_embeds = self.visual_encoder(image)
-            image_embeds = self.vision_proj(image_embeds)
-            image_feat = F.normalize(image_embeds, dim=-1)
-            image_features.append(image_feat)
+        # with torch.no_grad():
+        image_embeds = self.visual_encoder(image)
+        image_embeds = self.vision_proj(image_embeds)
+        image_feat = F.normalize(image_embeds, dim=-1)
 
-        text_features = []
-        for text in texts:
-            text_output = self.text_encoder(
-                text.input_ids,
-                attention_mask=text.attention_mask,
-                output_hidden_states=False,
-            )
-            text_embeds = self.text_proj(text_output.last_hidden_state[:, 0, :])
-            text_feat = F.normalize(text_embeds, dim=-1)
-            text_features.append(text_feat)
+        text_output = self.text_encoder(
+            text.input_ids,
+            attention_mask=text.attention_mask,
+            output_hidden_states=False,
+        )
+        text_embeds = self.text_proj(text_output.last_hidden_state[:, 0, :])
+        text_feat = F.normalize(text_embeds, dim=-1)
 
         if return_feat:
             return image_feat, text_feat
@@ -189,7 +183,7 @@ class CLIP(nn.Module):
                 loss_ita = self.criterion(image_feat, text_feat, image_ids, text_ids)
 
             else:
-                loss_ita = self.criterion(image_features, text_features)
+                loss_ita = self.criterion(image_feat, text_feat)
 
         elif self.ita_type == "vicreg":
             loss_ita = self.criterion(image_embeds, text_embeds)
@@ -197,13 +191,13 @@ class CLIP(nn.Module):
         elif self.ita_type == "sogclr":
             image_ids = concat_all_gather(idx)
             text_ids = concat_all_gather(text_idx)
-            loss_ita = self.criterion(image_features, text_features, image_ids, text_ids, epoch)
+            loss_ita = self.criterion(image_feat, text_feat, image_ids, text_ids, epoch)
 
         elif self.ita_type == "isogclr":
             image_ids = concat_all_gather(idx)
             text_ids = concat_all_gather(text_idx)
             loss_ita, image_tau, text_tau = self.criterion(
-                image_features, text_features, image_ids, text_ids, epoch, max_epoch
+                image_feat, text_feat, image_ids, text_ids, epoch, max_epoch
             )
             info_dict = {
                 "image_tau": image_tau,
@@ -216,7 +210,7 @@ class CLIP(nn.Module):
             image_ids = concat_all_gather(idx)
             text_ids = concat_all_gather(text_idx)
             loss_ita, image_tau, text_tau = self.criterion(
-                image_features, text_features, image_ids, text_ids, epoch, max_epoch
+                image_feat, text_feat, image_ids, text_ids, epoch, max_epoch
             )
             info_dict = {
                 "image_tau": image_tau,
@@ -226,13 +220,13 @@ class CLIP(nn.Module):
             }
 
         elif self.ita_type == "onlineclr":
-            loss_ita = self.criterion(image_features, text_features)
+            loss_ita = self.criterion(image_feat, text_feat)
 
         elif self.ita_type == "clipPCT":
             per_sample_temperature = concat_all_gather(per_sample_temperature)
             loss_ita = self.criterion(
-                image_features=image_features,
-                text_features=text_features,
+                image_features=image_feat,
+                text_features=text_feat,
                 per_sample_temperature=per_sample_temperature,
             )
 

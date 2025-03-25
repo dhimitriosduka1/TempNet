@@ -124,9 +124,15 @@ def train(
 
     period = (args.epochs * data_loader.batches_per_epoch) / 5.0
 
-    for i, (images, texts, idx, text_idx, _, temperature, __) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
-    ):
+    for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        images = batch["image"]
+        augmented_images = batch["augmented_image"]
+
+        texts = batch["caption"]
+        augmented_texts = batch["augmented_caption"]
+
+        idx = batch["idx"]
+        text_idx = batch["text_idx"]
 
         if i % 500 == 0:
             model.eval()
@@ -156,21 +162,19 @@ def train(
             )  # exp decay
 
         # Images is an array of images containing the original and one augmentation
-        images = [image.to(device, non_blocking=True) for image in images]
+        images = images.to(device, non_blocking=True)
 
         idx = idx.to(device, non_blocking=True)
         text_idx = text_idx.to(device, non_blocking=True)
 
         # Texts is an array of captions containing the original and one augmentation
-        text_inputs = [
-            tokenizer(
-                text,
-                padding="max_length",
-                truncation=True,
-                max_length=30,
-                return_tensors="pt",
-            ).to(device) for text in texts
-        ]
+        text_inputs = tokenizer(
+            texts,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
 
         if grad_scaler is None:
             assert 0
@@ -194,13 +198,12 @@ def train(
                     model.module.criterion.set_temperature(updated_temperature)
 
                 loss_term, info_dict = model(
-                    images,
-                    text_inputs,
+                    image=images,
+                    text=text_inputs,
                     idx=idx,
                     text_idx=text_idx,
                     epoch=epoch,
                     max_epoch=max_epoch,
-                    per_sample_temperature=temperature,
                 )
 
                 if utils.is_main_process():
@@ -791,7 +794,10 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, key, _) in tqdm(enumerate(train_loader)):
+        for i, batch in tqdm(enumerate(train_loader)):
+            image = batch["image"]
+            text = batch["caption"]
+
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
                 text,
@@ -899,7 +905,9 @@ def main(args):
         # pass
         if args.ita_type == "isogclr_tempnet":
             with torch.no_grad():
-                image, text, _, _, _, _ = next(iter(train_loader))
+                batch = next(iter(train_loader))
+                image = batch["image"]
+                text = batch["caption"]
 
                 image = image.to(device)
                 image_embeds = model.vision_proj(model.visual_encoder(image))
@@ -1137,7 +1145,12 @@ def main(args):
                 print("*" * 10, text, tau_image)
 
         with torch.no_grad():
-            for image, text, idx, text_idx, class_, key in tqdm(train_loader):
+            for batch in tqdm(train_loader):
+                image = batch["image"]
+                text = batch["caption"]
+                idx = batch["idx"]
+                text_idx = batch["text_idx"]
+
                 image = image.to(device)
                 text = tokenizer(
                     text,
@@ -1350,7 +1363,7 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write("best epoch: %d" % best_epoch)
 
-    wandb.finish()
+        wandb.finish()
 
 
 def evaluate(

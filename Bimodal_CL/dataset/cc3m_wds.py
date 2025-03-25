@@ -68,7 +68,6 @@ def decoder_pth(key, value):
         image = Image.fromarray(image.numpy()).convert("RGB")
         return image
 
-# I want to add data augmentations for image, text or both and use them in the loss
 
 def make_dataset_train(
     transform,
@@ -83,35 +82,39 @@ def make_dataset_train(
             # We need to remove the shardindex_ part
             return {k.split("_", 1)[1]: v for k, v in data.items()}
 
-    def make_sample_train(sample, extended_captions=None, enable_i2i_loss=False, enable_t2t_loss=False):
-        if enable_t2t_loss and extended_captions == "":
-            raise ValueError("Extended captions must be provided when enable_t2t_loss = True")
-
+    def make_sample_train(
+        sample, extended_captions=None, enable_i2i_loss=False, enable_t2t_loss=False
+    ):
         key = sample["__key__"]
+        image = sample["image.pth"]
+        caption = sample["metadata.pyd"]["caption"]
 
-        images = [transform(sample["image.pth"])]
-
-        captions = [sample["metadata.pyd"]["caption"]]
         if extended_captions is not None:
-            nr_samples = 2 if enable_t2t_loss else 1
-            # Sample uniformly from a list of captions
-            candidates = [extended_captions[key]["caption"]] + extended_captions[key][
-                "paraphrases"
-            ]
-            captions = random.sample(candidates, nr_samples) # This always returns a list
+            caption = random.sample(
+                [caption, *extended_captions[key]["paraphrases"]], 1
+            )[0]
 
-        captions = [pre_caption(caption=caption, max_words=max_words) for caption in captions]
-        
-        # TODO: Refactor the return object
-        return (
-            images,
-            captions,
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            key,
-        )
+        base_caption = pre_caption(caption=caption, max_words=max_words)
+        augmented_caption = None
+        if enable_t2t_loss:
+            assert extended_captions is not None, "Extended captions are not available"
+            random_caption = random.sample(extended_captions[key]["paraphrases"], 1)[0]
+            augmented_caption = pre_caption(caption=random_caption, max_words=max_words)
+
+        base_image = transform(image)
+        augmented_image = None
+        if enable_i2i_loss:
+            augmented_image = transform(image)
+
+        return {
+            "image": base_image,
+            "augmented_image": augmented_image,
+            "caption": base_caption,
+            "augmented_caption": augmented_caption,
+            "key": key,
+            "idx": -1,
+            "text_idx": -1,
+        }
 
     train_set = wds.WebDataset(
         urls=get_train_shards(),
