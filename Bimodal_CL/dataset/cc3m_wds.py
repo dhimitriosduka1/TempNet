@@ -95,14 +95,14 @@ def make_dataset_train(
             )[0]
 
         base_caption = pre_caption(caption=caption, max_words=max_words)
-        augmented_caption = None
+        augmented_caption = ""
         if enable_t2t_loss:
             assert extended_captions is not None, "Extended captions are not available"
             random_caption = random.sample(extended_captions[key]["paraphrases"], 1)[0]
             augmented_caption = pre_caption(caption=random_caption, max_words=max_words)
 
         base_image = transform(image)
-        augmented_image = None
+        augmented_image = torch.empty(0)
         if enable_i2i_loss:
             augmented_image = transform(image)
 
@@ -131,7 +131,7 @@ def make_dataset_train(
     train_set = (
         train_set.shuffle(1000)
         .decode(decoder_pth)
-        .map(lambda sample: make_sample_train(sample, extended_captions))
+        .map(lambda sample: make_sample_train(sample, extended_captions, args.enable_i2i_loss, args.enable_t2t_loss))
     )
     train_set = train_set.batched(args.batch_size_train)
     return train_set

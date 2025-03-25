@@ -161,15 +161,22 @@ def train(
                 args.lr_temp_net * 0.9**epoch
             )  # exp decay
 
-        # Images is an array of images containing the original and one augmentation
         images = images.to(device, non_blocking=True)
+        augmented_images = augmented_images.to(device, non_blocking=True)
 
         idx = idx.to(device, non_blocking=True)
         text_idx = text_idx.to(device, non_blocking=True)
 
-        # Texts is an array of captions containing the original and one augmentation
         text_inputs = tokenizer(
             texts,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
+        
+        augmented_texts = tokenizer(
+            augmented_texts,
             padding="max_length",
             truncation=True,
             max_length=30,
@@ -206,6 +213,7 @@ def train(
                     text_idx=text_idx,
                     epoch=epoch,
                     max_epoch=max_epoch,
+                    args=args,
                 )
 
                 if utils.is_main_process():
@@ -1629,7 +1637,9 @@ if __name__ == "__main__":
 
     # Losses
     parser.add_argument("--enable_i2i_loss", action="store_true")
-    parser.add_argument("--enbale_t2t_loss", action="store_true")
+    parser.add_argument("--enable_t2t_loss", action="store_true")
+    parser.add_arugmnet("--i2i_loss_weight", default=1.0, type=float)
+    parser.add_argument("--t2t_loss_weight", default=1.0, type=float)
 
     args = parser.parse_args()
 

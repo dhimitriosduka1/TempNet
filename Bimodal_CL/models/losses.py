@@ -62,17 +62,18 @@ class CLIP_Loss(nn.Module):
         augmented_text_features,
         image_idx=None,
         text_idx=None,
+        args=None,
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
 
-            if augmented_image_features is not None:
+            if args.enable_i2i_loss:
                 augmented_image_features = torch.cat(
                     GatherLayer.apply(augmented_image_features), dim=0
                 )
 
-            if augmented_text_features is not None:
+            if args.enable_t2t_loss:
                 augmented_text_features = torch.cat(
                     GatherLayer.apply(augmented_text_features), dim=0
                 )
@@ -106,7 +107,7 @@ class CLIP_Loss(nn.Module):
             }
 
             # Compute i2i loss if augmented_image_features is not None:
-            if augmented_image_features is not None:
+            if args.enable_i2i_loss:
                 sim_i2i = (
                     image_features @ augmented_image_features.T
                 ) / self.temperature
@@ -114,18 +115,18 @@ class CLIP_Loss(nn.Module):
                     augmented_image_features.shape[0], device=image_features.device
                 )
                 i2i_loss = F.cross_entropy(sim_i2i, labels)
-                total_loss += i2i_loss
+                total_loss += args.i2i_loss_weight * i2i_loss
 
                 log_obj["train/i2i_loss"] = i2i_loss.item()
 
             # Compute t2t loss if augmented_text_features is not None:
-            if augmented_text_features is not None:
+            if args.enable_t2t_loss:
                 sim_t2t = (text_features @ augmented_text_features.T) / self.temperature
                 labels = torch.arange(
                     augmented_text_features.shape[0], device=text_features.device
                 )
                 t2t_loss = F.cross_entropy(sim_t2t, labels)
-                total_loss += t2t_loss
+                total_loss += args.t2t_loss_weight * t2t_loss
 
                 log_obj["train/t2t_loss"] = t2t_loss.item()
 
