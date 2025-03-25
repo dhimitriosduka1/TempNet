@@ -39,5 +39,6 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --temperature_scheduler cos \
     --tau_min $TAU_MIN \
     --tau_max $TAU_MAX \
+    --cc3m_extended_captions_path /BS/dduka/work/databases/cc3m/train/captions_extended_llm.json \
     --enable_t2t_loss \
     --t2t_loss_weight $LOSS_WEIGHT \
