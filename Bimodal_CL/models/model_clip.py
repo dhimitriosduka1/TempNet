@@ -142,11 +142,14 @@ class CLIP(nn.Module):
     def forward(
         self,
         image,
+        augmented_image,
         text,
+        augmented_text,
         idx,
         text_idx,
         epoch,
         max_epoch,
+        args,
         return_feat=False,
         per_sample_temperature=None,
     ):
@@ -171,11 +174,29 @@ class CLIP(nn.Module):
         text_embeds = self.text_proj(text_output.last_hidden_state[:, 0, :])
         text_feat = F.normalize(text_embeds, dim=-1)
 
+        augmented_image_feat = None
+        augmented_text_feat = None
+
+        if args.enable_i2i_loss:
+            with torch.no_grad():
+                augmented_image_embeds = self.visual_encoder(augmented_image)
+                augmented_image_embeds = self.vision_proj(augmented_image_embeds)
+                augmented_image_feat = F.normalize(augmented_image_embeds, dim=-1)
+
+        if args.enable_t2t_loss:
+            with torch.no_grad():
+                augmented_text_output = self.text_encoder(
+                    augmented_text.input_ids,
+                    attention_mask=augmented_text.attention_mask,
+                    output_hidden_states=False,
+                )
+                augmented_text_embeds = self.text_proj(
+                    augmented_text_output.last_hidden_state[:, 0, :]
+                )
+                augmented_text_feat = F.normalize(augmented_text_embeds, dim=-1)
+
         if return_feat:
             return image_feat, text_feat
-
-        avg_image_tau = None
-        avg_text_tau = None
 
         info_dict = {}
 
@@ -183,10 +204,24 @@ class CLIP(nn.Module):
             if self.personalized_tau:
                 image_ids = concat_all_gather(idx)
                 text_ids = concat_all_gather(text_idx)
-                loss_ita = self.criterion(image_feat, text_feat, image_ids, text_ids)
+                loss_ita = self.criterion(
+                    image_feat,
+                    text_feat,
+                    augmented_image_feat,
+                    augmented_text_feat,
+                    image_ids,
+                    text_ids,
+                    args,
+                )
 
             else:
-                loss_ita = self.criterion(image_feat, text_feat)
+                loss_ita = self.criterion(
+                    image_features=image_feat,
+                    text_features=text_feat,
+                    augmented_image_features=augmented_image_feat,
+                    augmented_text_features=augmented_text_feat,
+                    args=args,
+                )
 
         elif self.ita_type == "vicreg":
             loss_ita = self.criterion(image_embeds, text_embeds)
