@@ -277,7 +277,20 @@ class SogCLR_Loss(nn.Module):
             batch_size - 1
         )
 
-        total_loss = image_loss.mean() + text_loss.mean()
+        image_loss = image_loss.mean()
+        text_loss = text_loss.mean()
+
+        total_loss = image_loss + text_loss
+
+        if utils.is_main_process():
+            wandb.log(
+                {
+                    "train/temperature": self.temperature,
+                    "train/i2t_loss": image_loss.item(),
+                    "train/t2i_loss": text_loss.item(),
+                },
+                step=wandb.run.step,
+            )
 
         return total_loss
 
