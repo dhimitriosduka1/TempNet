@@ -199,7 +199,9 @@ def train(
 
                 loss_term, info_dict = model(
                     image=images,
+                    augmented_image=augmented_images,
                     text=text_inputs,
+                    augmented_text=augmented_texts,
                     idx=idx,
                     text_idx=text_idx,
                     epoch=epoch,

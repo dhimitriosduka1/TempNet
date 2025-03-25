@@ -54,10 +54,28 @@ class CLIP_Loss(nn.Module):
     def set_temperature(self, temperature):
         self.temperature = temperature
 
-    def forward(self, image_features, text_features, image_idx=None, text_idx=None):
+    def forward(
+        self,
+        image_features,
+        text_features,
+        augmented_image_features,
+        augmented_text_features,
+        image_idx=None,
+        text_idx=None,
+    ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+            if augmented_image_features is not None:
+                augmented_image_features = torch.cat(
+                    GatherLayer.apply(augmented_image_features), dim=0
+                )
+
+            if augmented_text_features is not None:
+                augmented_text_features = torch.cat(
+                    GatherLayer.apply(augmented_text_features), dim=0
+                )
 
         if self.personalized_tau:
             image_temp = self.image_tau[image_idx]
@@ -81,13 +99,39 @@ class CLIP_Loss(nn.Module):
 
             total_loss = (i2t_loss + t2i_loss) / 2
 
+            log_obj = {
+                "train/temperature": self.temperature,
+                "train/t2i_loss": t2i_loss.item(),
+                "train/i2t_loss": i2t_loss.item(),
+            }
+
+            # Compute i2i loss if augmented_image_features is not None:
+            if augmented_image_features is not None:
+                sim_i2i = (
+                    image_features @ augmented_image_features.T
+                ) / self.temperature
+                labels = torch.arange(
+                    augmented_image_features.shape[0], device=image_features.device
+                )
+                i2i_loss = F.cross_entropy(sim_i2i, labels)
+                total_loss += i2i_loss
+
+                log_obj["train/i2i_loss"] = i2i_loss.item()
+
+            # Compute t2t loss if augmented_text_features is not None:
+            if augmented_text_features is not None:
+                sim_t2t = (text_features @ augmented_text_features.T) / self.temperature
+                labels = torch.arange(
+                    augmented_text_features.shape[0], device=text_features.device
+                )
+                t2t_loss = F.cross_entropy(sim_t2t, labels)
+                total_loss += t2t_loss
+
+                log_obj["train/t2t_loss"] = t2t_loss.item()
+
             if utils.is_main_process():
                 wandb.log(
-                    {
-                        "train/temperature": self.temperature,
-                        "train/t2i_loss": t2i_loss.item(),
-                        "train/i2t_loss": i2t_loss.item(),
-                    },
+                    log_obj,
                     step=wandb.run.step,
                 )
 
