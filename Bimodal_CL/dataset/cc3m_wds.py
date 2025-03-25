@@ -71,61 +71,69 @@ def decoder_pth(key, value):
 
 def make_dataset_train(
     transform,
+    args,
     max_words=30,
-    cache_dir=None,
-    batch_size=128,
-    cc3m_extended_captions_path="",
 ):
     def load_extended_captions():
-        with open(cc3m_extended_captions_path, "r") as f:
+        with open(args.cc3m_extended_captions_path, "r") as f:
             data = json.load(f)
 
             # Key is in the format shardindex_samplexxx_yyy => samplexxx_yyy
             # We need to remove the shardindex_ part
             return {k.split("_", 1)[1]: v for k, v in data.items()}
 
-    def make_sample_train(sample, extended_captions=None):
-        image = sample["image.pth"]
-
+    def make_sample_train(
+        sample, extended_captions=None, enable_i2i_loss=False, enable_t2t_loss=False
+    ):
         key = sample["__key__"]
-        if extended_captions is not None:
-            # Sample uniformly from a list of captions
-            candidates = [extended_captions[key]["caption"]] + extended_captions[key][
-                "paraphrases"
-            ]
-            caption = random.choice(candidates)
-        else:
-            caption = sample["metadata.pyd"]["caption"]
+        image = sample["image.pth"]
+        caption = sample["metadata.pyd"]["caption"]
 
-        # TODO: Refactor the return object
-        return (
-            transform(image),
-            pre_caption(caption=caption, max_words=max_words),
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            torch.tensor(-1.0),
-            key,
-        )
+        if extended_captions is not None:
+            caption = random.sample(
+                [caption, *extended_captions[key]["paraphrases"]], 1
+            )[0]
+
+        base_caption = pre_caption(caption=caption, max_words=max_words)
+        augmented_caption = ""
+        if enable_t2t_loss:
+            assert extended_captions is not None, "Extended captions are not available"
+            random_caption = random.sample(extended_captions[key]["paraphrases"], 1)[0]
+            augmented_caption = pre_caption(caption=random_caption, max_words=max_words)
+
+        base_image = transform(image)
+        augmented_image = torch.empty(0)
+        if enable_i2i_loss:
+            augmented_image = transform(image)
+
+        return {
+            "image": base_image,
+            "augmented_image": augmented_image,
+            "caption": base_caption,
+            "augmented_caption": augmented_caption,
+            "key": key,
+            "idx": -1,
+            "text_idx": -1,
+        }
 
     train_set = wds.WebDataset(
         urls=get_train_shards(),
         resampled=True,
         shardshuffle=True,
-        cache_dir=cache_dir,
+        cache_dir=None,
         nodesplitter=wds.split_by_worker,
     )
 
     extended_captions = None
-    if cc3m_extended_captions_path:
+    if args.cc3m_extended_captions_path != "":
         extended_captions = load_extended_captions()
 
     train_set = (
         train_set.shuffle(1000)
         .decode(decoder_pth)
-        .map(lambda sample: make_sample_train(sample, extended_captions))
+        .map(lambda sample: make_sample_train(sample, extended_captions, args.enable_i2i_loss, args.enable_t2t_loss))
     )
-    train_set = train_set.batched(batch_size)
+    train_set = train_set.batched(args.batch_size_train)
     return train_set
 
 

@@ -124,9 +124,15 @@ def train(
 
     period = (args.epochs * data_loader.batches_per_epoch) / 5.0
 
-    for i, (image, text, idx, text_idx, _, temperature, __) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
-    ):
+    for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        images = batch["image"]
+        augmented_images = batch["augmented_image"]
+
+        texts = batch["caption"]
+        augmented_texts = batch["augmented_caption"]
+
+        idx = batch["idx"]
+        text_idx = batch["text_idx"]
 
         if i % 500 == 0:
             model.eval()
@@ -155,11 +161,22 @@ def train(
                 args.lr_temp_net * 0.9**epoch
             )  # exp decay
 
-        image = image.to(device, non_blocking=True)
+        images = images.to(device, non_blocking=True)
+        augmented_images = augmented_images.to(device, non_blocking=True)
+
         idx = idx.to(device, non_blocking=True)
         text_idx = text_idx.to(device, non_blocking=True)
-        text_input = tokenizer(
-            text,
+
+        text_inputs = tokenizer(
+            texts,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
+        
+        augmented_texts = tokenizer(
+            augmented_texts,
             padding="max_length",
             truncation=True,
             max_length=30,
@@ -188,13 +205,15 @@ def train(
                     model.module.criterion.set_temperature(updated_temperature)
 
                 loss_term, info_dict = model(
-                    image,
-                    text_input,
+                    image=images,
+                    augmented_image=augmented_images,
+                    text=text_inputs,
+                    augmented_text=augmented_texts,
                     idx=idx,
                     text_idx=text_idx,
                     epoch=epoch,
                     max_epoch=max_epoch,
-                    per_sample_temperature=temperature,
+                    args=args,
                 )
 
                 if utils.is_main_process():
@@ -785,7 +804,10 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, (image, text, key, _) in tqdm(enumerate(train_loader)):
+        for i, batch in tqdm(enumerate(train_loader)):
+            image = batch["image"]
+            text = batch["caption"]
+
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
                 text,
@@ -893,7 +915,9 @@ def main(args):
         # pass
         if args.ita_type == "isogclr_tempnet":
             with torch.no_grad():
-                image, text, _, _, _, _ = next(iter(train_loader))
+                batch = next(iter(train_loader))
+                image = batch["image"]
+                text = batch["caption"]
 
                 image = image.to(device)
                 image_embeds = model.vision_proj(model.visual_encoder(image))
@@ -1131,7 +1155,12 @@ def main(args):
                 print("*" * 10, text, tau_image)
 
         with torch.no_grad():
-            for image, text, idx, text_idx, class_, key in tqdm(train_loader):
+            for batch in tqdm(train_loader):
+                image = batch["image"]
+                text = batch["caption"]
+                idx = batch["idx"]
+                text_idx = batch["text_idx"]
+
                 image = image.to(device)
                 text = tokenizer(
                     text,
@@ -1344,7 +1373,7 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write("best epoch: %d" % best_epoch)
 
-    wandb.finish()
+        wandb.finish()
 
 
 def evaluate(
@@ -1605,6 +1634,12 @@ if __name__ == "__main__":
         "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
     )
     parser.add_argument("--cc3m_extended_captions_path", default="")
+
+    # Losses
+    parser.add_argument("--enable_i2i_loss", action="store_true")
+    parser.add_argument("--enable_t2t_loss", action="store_true")
+    parser.add_argument("--i2i_loss_weight", default=1.0, type=float)
+    parser.add_argument("--t2t_loss_weight", default=1.0, type=float)
 
     args = parser.parse_args()
 
