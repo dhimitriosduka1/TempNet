@@ -57,7 +57,7 @@ from dataset.cc3m_wds import (
     get_val_dataset_size,
 )
 from scheduler.temperature_scheduler import get_next_temperature
-from slurm import get_remaining_slurm_time
+from global_step import GlobalStep
 
 
 def train(
@@ -174,7 +174,7 @@ def train(
             max_length=30,
             return_tensors="pt",
         ).to(device)
-        
+
         augmented_texts = tokenizer(
             augmented_texts,
             padding="max_length",
@@ -221,7 +221,8 @@ def train(
                         {
                             "train/loss": loss_term,
                             "train/lr": optimizer.param_groups[0]["lr"],
-                        }
+                        },
+                        step=GlobalStep.get(),
                     )
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
@@ -276,6 +277,9 @@ def train(
             and args.sched != "midpoint"
         ):
             scheduler.step(i // step_size)
+
+        # Increment the step of wandb
+        GlobalStep.increment()
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -1253,8 +1257,17 @@ def main(args):
         # Resume from the next epoch
         if "epoch" in checkpoint:
             args.start_epoch = checkpoint["epoch"] + 1
+
+            step = args.start_epoch * train_loader.batches_per_epoch
+            GlobalStep.set(step)
+
             print(f"Epoch stored in checkpoint: {checkpoint['epoch']}")
             print(f"Training will start from epoch {args.start_epoch}")
+
+            if utils.is_main_process():
+                print(f"Starting step in run: {wandb.run.step}")
+                
+            print(f"Training will start from step: {GlobalStep.get()}")
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
@@ -1358,12 +1371,12 @@ def main(args):
         print(f"Mean epoch time: {np.mean(epoch_times)}")
 
         # If there isn't enough remaining time for another epoch, just end the run
-        threshold = 600
-        if get_remaining_slurm_time() - threshold <= np.mean(epoch_times):
-            print(
-                f"Remaining time {get_remaining_slurm_time()}s, mean epoch time {np.mean(epoch_times)}s. Breaking."
-            )
-            break
+        # threshold = 600
+        # if get_remaining_slurm_time() - threshold <= np.mean(epoch_times):
+        #     print(
+        #         f"Remaining time {get_remaining_slurm_time()}s, mean epoch time {np.mean(epoch_times)}s. Breaking."
+        #     )
+        #     break
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
