@@ -1,0 +1,3 @@
+When creating a job for Anna:
+    1. Change the permission of the folder
+    2. Add micromamba loading to the script
