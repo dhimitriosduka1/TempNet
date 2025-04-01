@@ -1,192 +1,305 @@
-# Source: https://github.com/LijieFan/LaCLIP/blob/main/rewrite/utils.py
-
-import os
-import sys
-import math
-import fire
-import time
+import argparse
 import json
 import torch
-import random
+from tqdm.auto import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from accelerate import Accelerator
+from accelerate.utils import gather_object
+from torch.utils.data import DataLoader
+from caption_dataset import CaptionDataset
 
-from tqdm import tqdm
-from pathlib import Path
-from typing import Tuple
-from llama import ModelArgs, Transformer, Tokenizer, LLaMA
-from fairscale.nn.model_parallel.initialize import initialize_model_parallel
+# --- Configuration ---
+DEFAULT_BATCH_SIZE = 64
+DEFAULT_MODEL_NAME = "meta-llama/Llama-3.2-1B-Instruct"
+DEFAULT_NUM_AUGMENTATIONS = 5
+DEFAULT_MAX_NEW_TOKENS = 75
+DEFAULT_DATA_PATH = "/BS/dduka/work/databases/cc3m/train/captions.json"
+OUTPUT_DIR = "."
 
+# PROMPT_TEMPLATE = """
+# Generate {num_augmentations} diverse paraphrases for the following image caption. Ensure each paraphrase is DESCRIPTIVE, focusing on the visual elements rather than telling a story.
 
-# Used for In-Context Learning
-human_source_caption_list = [
-    "Honey buttermilk biscuits on a cooling rack being drizzled with honey",
-    "happy corgi time",
-    "<PERSON> dog looking at dirt from the ground",
-    "navy vintage pants - lime green bag - ivory Maison Simons t-shirt - Zara clogs",
-    "Ooak Barbie City Shine",
-    "Real Wedding on a NYC Rooftop",
-    "the proud of my beloved italian bracco after leg amputation due to a tumor.",
-    "Pineapple Wearing Headphones Art Print by Philip Haynes",
-    "Ominous thunderclouds behind the Capitol Building",
-    "Steampunk woman with gun",
-    "a new watch with some old friends",
-    "Particularly important to Africa is the East African Highland Banana (EAHB), a staple food for 80 million people. Uganda alone has about 120 varieties of this type of banana.",
-    "Electric Blue Guitar There Goes My Hero, Rock The Vote, <PERSON>, <PERSON>, Music Photo, Red Eyes, Photo Quotes, Electric Blue, Music Lyrics",
-    "Advanced Bicycle Skills Video - Valuable Video for Safe Cycl",
-    "grilled turkey pesto sandwich",
-    "Actress <PERSON> during the launch of international fashion brand Forever 21 store at a mall in Mumbai on Saturday, October 12th, 2013.",
-]
+# Avoid narrative paraphrases that interpret actions sequentially or add character motivations not in the original caption.
 
-# Used for In-Context Learning
-human_target_caption_list = [
-    "A warm stack of freshly baked honey buttermilk biscuits, sit on a cooling rack as they are drizzled with golden honey",
-    "Delighted corgi stands in the hallway, looking at its owner",
-    "<Person>'s dog, lying on the ground, looks at the dirt",
-    "A young beautiful lady wearing navy vintage pants and ivory Maison Simons t-shirt, is holding a lime green bag.",
-    "A custom-made Barbie doll with a city-inspired look shines brightly",
-    "a couple is kissing each other during their rooftop wedding in NYC",
-    "my italian bracco lied down proudly under the sunshile, despite of leg amputation due to a tumor.",
-    "An art from Philip Haynes depicts a pineapple that wears headphones",
-    "Thunderclouds loom over the Capitol Building, casting a dark shadow",
-    "A fierce and stylish steampunk woman holds a toy revolver in her hands",
-    "The watch sits besides a cartoon picture, evoking memories of cherished times shared with long-time friends",
-    "An African man holds a bunch of bananas, which is particularly important to Africa",
-    "<PERSON> is playing an electric blue guitar, eyes bloodshot from the stage lights",
-    "A Cyclist is demonstrating advanced bicycle skills in a video that will help people stay safe.",
-    "A grilled turkey pesto sandwich with melted cheese and fresh arugula is served on a plate.",
-    "The young beautiful actress attended the launch of fashion brand Forever 21 at a mall.",
-]
+# Do not include the original sentence in your output.
 
+# Examples:
 
-def setup_model_parallel() -> Tuple[int, int]:
-    local_rank = int(os.environ.get("LOCAL_RANK", -1))
-    world_size = int(os.environ.get("WORLD_SIZE", -1))
+# Original Caption: Honey buttermilk biscuits on a cooling rack being drizzled with honey
+# Paraphrase: A warm stack of freshly baked honey buttermilk biscuits sits on a cooling rack, being drizzled with golden honey.
 
-    torch.distributed.init_process_group("nccl")
-    initialize_model_parallel(world_size)
-    torch.cuda.set_device(local_rank)
+# Original Caption: Happy corgi time
+# Paraphrase: A delighted corgi stands in a hallway, looking towards its owner.
 
-    # seed must be the same in all processes
-    torch.manual_seed(1)
-    return local_rank, world_size
+# Original Caption: Pineapple Wearing Headphones Art Print by Philip Haynes
+# Paraphrase: An art print by Philip Haynes depicts a pineapple wearing headphones.
+
+# Output only the {num_augmentations} paraphrased sentences, each on a new line, starting with the number.
+
+# Original Sentence: "{caption}"
+
+# Descriptive Paraphrases:
+# 1. """
+
+PROMPT_TEMPLATE = """
+Generate {num_augmentations} diverse paraphrases for the following image caption. Follow these requirements:
+
+1. Each paraphrase must preserve the original meaning completely
+2. Use different vocabulary and sentence structure for each paraphrase
+3. Ensure no two paraphrases follow the same grammatical pattern
+4. Keep each paraphrase between 10-20 words
+5. Use descriptive language that states facts/observations rather than telling a story
+6. Do not include the original sentence in your output
+7. Do not start multiple paraphrases with the same word or phrase
+
+Original Caption: "{caption}"
+
+Paraphrases:
+1.
+"""
 
 
-def load(
-    ckpt_dir: str,
-    tokenizer_path: str,
-    local_rank: int,
-    world_size: int,
-    max_seq_len: int,
-    max_batch_size: int,
-) -> LLaMA:
-    start_time = time.time()
-    checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
-    assert world_size == len(
-        checkpoints
-    ), f"Loading a checkpoint for MP={len(checkpoints)} but world size is {world_size}"
-    ckpt_path = checkpoints[local_rank]
-    print("Loading")
-    checkpoint = torch.load(ckpt_path, map_location="cpu")
-    with open(Path(ckpt_dir) / "params.json", "r") as f:
-        params = json.loads(f.read())
+def parse_generated_text(text, num_expected):
+    """Parses the model's output to extract individual augmentations."""
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    cleaned_lines = []
+    for line in lines:
+        # There are some cases where the model outputs \"
+        line = line.replace('"', "")
 
-    model_args: ModelArgs = ModelArgs(
-        max_seq_len=max_seq_len, max_batch_size=max_batch_size, **params
+        # Basic cleaning: remove potential numbering/bullets
+        if line.startswith(tuple(f"{i}." for i in range(1, 10))) or line.startswith(
+            ("- ", "* ")
+        ):
+            # Check if there's content after the numbering/bullet before splitting
+            parts = line.split(" ", 1)
+            if len(parts) > 1:
+                cleaned_lines.append(parts[1].strip())
+            # else: # Handle cases like "1." with no text after (ignore)
+            #    pass
+        else:
+            cleaned_lines.append(line)
+
+    # Return up to num_expected, filtering any short/empty lines again
+    return [line for line in cleaned_lines if len(line) > 5][:num_expected]
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate diverse augmentations using a Llama model and PyTorch Dataset."
     )
-    tokenizer = Tokenizer(model_path=tokenizer_path)
-    model_args.vocab_size = tokenizer.n_words
-    torch.set_default_tensor_type(torch.cuda.HalfTensor)
-    model = Transformer(model_args)
-    torch.set_default_tensor_type(torch.FloatTensor)
-    model.load_state_dict(checkpoint, strict=False)
-
-    generator = LLaMA(model, tokenizer)
-    print(f"Loaded in {time.time() - start_time:.2f} seconds")
-    return generator
-
-
-def main(
-    ckpt_dir: str,
-    tokenizer_path: str,
-    temperature: float = 0.9,
-    top_p: float = 0.95,
-    max_seq_len: int = 512,
-    max_batch_size: int = 32,
-    prompt_filename: str = "text/source.txt",
-    output_filename: str = "text/target.txt",
-):
-    local_rank, world_size = setup_model_parallel()
-    if local_rank > 0:
-        sys.stdout = open(os.devnull, "w")
-
-    generator = load(
-        ckpt_dir, tokenizer_path, local_rank, world_size, max_seq_len, max_batch_size
+    # --- Adjusted Arguments ---
+    parser.add_argument(
+        "--data_path",
+        default=DEFAULT_DATA_PATH,
+        help=f"Path to the data file needed by the custom Dataset (default: {DEFAULT_DATA_PATH}).",
+    )
+    parser.add_argument(
+        "--output_file",
+        help="Path to save the results (JSON format).",
+        default="output.json",
+    )
+    parser.add_argument(
+        "--model_name",
+        default=DEFAULT_MODEL_NAME,
+        help=f"Hugging Face model name (default: {DEFAULT_MODEL_NAME}).",
+    )
+    parser.add_argument(
+        "--num_augmentations",
+        type=int,
+        default=DEFAULT_NUM_AUGMENTATIONS,
+        help=f"Number of augmentations per caption (default: {DEFAULT_NUM_AUGMENTATIONS}).",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=DEFAULT_BATCH_SIZE,
+        help=f"Inference batch size (per device) (default: {DEFAULT_BATCH_SIZE}).",
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=DEFAULT_MAX_NEW_TOKENS,
+        help=f"Max new tokens to generate *per augmentation* (approx) (default: {DEFAULT_MAX_NEW_TOKENS}).",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="Sampling temperature for generation.",
+    )
+    parser.add_argument(
+        "--top_p", type=float, default=0.9, help="Nucleus sampling probability."
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help="Trust remote code for model loading.",
     )
 
-    new_prompt_filename = output_filename
+    args = parser.parse_args()
 
-    # Change parent directory to output
-    with open(prompt_filename, "r") as f:
-        original_prompts = f.readlines()
+    accelerator = Accelerator()
 
-    new_prompts = []
-    num_batches = math.ceil(len(original_prompts) / max_batch_size)
+    dataset = CaptionDataset(data_path=args.data_path)
 
-    for batch_idx in tqdm(range(num_batches)):
-        prompts = []
-        current_batch = original_prompts[
-            batch_idx * max_batch_size : (batch_idx + 1) * max_batch_size
+    data_loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+    )
+
+    prepared_data_loader = accelerator.prepare(data_loader)
+
+    accelerator.print(f"Loading model: {args.model_name}...")
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        accelerator.print("Set tokenizer pad_token to eos_token.")
+
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_name,
+        device_map="auto",
+        trust_remote_code=args.trust_remote_code,
+        torch_dtype=torch.float16,
+    )
+    accelerator.print(f"Model loaded on device(s): {model.hf_device_map}")
+    model.eval()
+
+    all_results_list = []
+
+    pbar = tqdm(
+        total=len(prepared_data_loader),
+        disable=not accelerator.is_main_process,
+        desc="Generating Augmentations",
+    )
+
+    i = 0
+
+    print(f"Starting generation with batch size {args.batch_size} per device...")
+    for batch in prepared_data_loader:
+        batch_captions = batch["caption"]
+        batch_image_ids = batch["image_id"]
+
+        # Construct prompts for the batch
+        prompts = [
+            PROMPT_TEMPLATE.format(
+                num_augmentations=args.num_augmentations, caption=caption
+            )
+            for caption in batch_captions
         ]
 
-        for _, original_prompt in enumerate(current_batch):
-            chosen_source_caption_list = []
-            chosen_target_caption_list = []
-            num_caps = len(human_source_caption_list)
-            chosen_idx = random.sample(range(num_caps), 3)
-            for idx in chosen_idx:
-                chosen_source_caption_list.append(human_source_caption_list[idx])
-                chosen_target_caption_list.append(human_target_caption_list[idx])
-
-            current_prompt = """Write image captions differently,
-
-            {} => {}
-
-            {} => {}
-
-            {} => {}
-
-            {} =>""".format(
-                chosen_source_caption_list[0],
-                chosen_target_caption_list[0],
-                chosen_source_caption_list[1],
-                chosen_target_caption_list[1],
-                chosen_source_caption_list[2],
-                chosen_target_caption_list[2],
-                original_prompt.replace("\n", ""),
-            )
-            prompt_tokens = generator.tokenizer.encode(
-                current_prompt, bos=True, eos=False
-            )
-            if len(prompt_tokens) <= max_seq_len - 5:
-                prompts.append(current_prompt)
-            else:
-                cut_len = max_seq_len - 10
-                prompt_tokens = prompt_tokens[:cut_len]
-                current_prompt = generator.tokenizer.decode(prompt_tokens) + " =>"
-                prompts.append(current_prompt)
-
-        results = generator.generate(
-            prompts, max_gen_len=77, temperature=temperature, top_p=top_p
+        # Tokenize batch
+        tokenizer.padding_side = "left"
+        inputs = tokenizer(
+            prompts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
         )
 
-        for result in results:
-            prompt_line = result.split("\n")[8].strip()
-            new_prompt = prompt_line.split("=>")[1].strip()
-            new_prompts.append(new_prompt)
+        # Generate
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs.to(
+                    model.device
+                ),  # Ensure inputs are on the correct device segment
+                max_new_tokens=args.max_new_tokens * args.num_augmentations
+                + 50,  # Add buffer
+                num_return_sequences=1,
+                do_sample=True,
+                temperature=args.temperature,
+                top_p=args.top_p,
+                pad_token_id=tokenizer.pad_token_id,
+                eos_token_id=tokenizer.eos_token_id,
+            )
 
-        if local_rank == 0:
-            with open(new_prompt_filename, "w") as f:
-                f.writelines([p.strip().replace("\n", " ") + "\n" for p in new_prompts])
+        # Decode and Parse
+        generated_texts = tokenizer.batch_decode(
+            outputs[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+        )
+
+        gathered_image_ids = gather_object(batch_image_ids)
+        gathered_captions = gather_object(batch_captions)
+        gathered_generated_texts = gather_object(generated_texts)
+
+        if accelerator.is_main_process:
+            batch_results = {}
+            for original_caption, image_id, generated_text in zip(
+                gathered_captions, gathered_image_ids, gathered_generated_texts
+            ):
+                parsed_augmentations = parse_generated_text(
+                    generated_text, args.num_augmentations
+                )
+
+                batch_results[image_id] = {
+                    "original": original_caption,
+                    "paraphrases": parsed_augmentations,
+                }
+
+            all_results_list.append(batch_results)
+            pbar.update(1)
+
+        # Save a checkpoint every 200 batches
+        if i % 10 == 0 and i !=0 and accelerator.is_main_process:
+            with open(
+                f"/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/llama_rewrite/checkpoint_{i}.json",
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(all_results_list, f, indent=4, ensure_ascii=False)
+            print(f"Checkpoint saved at batch {i}.")
+        
+        i += 1
+
+    # --- Finalize and Save Results (Main Process Only) ---
+    if accelerator.is_main_process:
+        pbar.close()
+
+        # Combine results from all gathered dictionaries
+        final_results = {}
+        for res_dict in all_results_list:
+            final_results.update(res_dict)  # Combine dicts from all batches/processes
+
+        # Check for potential data loss due to non-unique keys (original captions)
+        original_caption_count = sum(
+            len(d) for d in all_results_list
+        )  # Count items across all gathered dicts
+        if len(final_results) < original_caption_count:
+            print(
+                "\nWarning: Some results might have been overwritten due to duplicate original captions."
+            )
+            print(f"  Processed items (approx): {original_caption_count}")
+            print(f"  Unique keys in output: {len(final_results)}")
+        elif len(final_results) < len(dataset):
+            print(
+                f"\nWarning: Generated results for {len(final_results)} captions, but dataset had {len(dataset)}. Some items might have been skipped or failed."
+            )
+        else:
+            print(
+                f"\nGenerated augmentations for {len(final_results)} unique captions."
+            )
+
+        # Save results
+        try:
+            with open(
+                "/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/llama_rewrite/"
+                + args.output_file,
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(final_results, f, indent=4, ensure_ascii=False)
+            print(f"Results saved to {args.output_file}")
+        except Exception as e:
+            print(f"Error saving results to {args.output_file}: {e}")
+
+    accelerator.wait_for_everyone()
+    print("Processing finished.")
 
 
 if __name__ == "__main__":
-    fire.Fire(main)
+    main()
