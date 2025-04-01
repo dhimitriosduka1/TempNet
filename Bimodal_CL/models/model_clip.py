@@ -12,6 +12,7 @@ from models.losses import (
     VICReg_Loss,
     onlineCLR_Loss,
     CLIP_Loss_PCT,
+    Sim_Based_CLIP_Loss,
 )
 
 import torch
@@ -44,6 +45,7 @@ class CLIP(nn.Module):
         sinkhorn_eps=0.05,
         swav_temp=0.1,
         swav_weight=1.0,
+        sim_based_loss_alpha=0.1,
     ):
         super().__init__()
 
@@ -135,6 +137,14 @@ class CLIP(nn.Module):
         elif self.ita_type == "clipPCT":
             print("Using clipPCT as loss")
             self.criterion = CLIP_Loss_PCT(world_size=world_size, temperature=self.temp)
+
+        elif self.ita_type == "sim_based_clip":
+            print(f"Using Sim_Based_CLIP_Loss")
+            self.criterion = Sim_Based_CLIP_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+            )
 
         else:
             raise NotImplementedError
@@ -266,6 +276,15 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 per_sample_temperature=per_sample_temperature,
+            )
+
+        elif self.ita_type == "sim_based_clip":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                augmented_image_features=augmented_image_feat,
+                augmented_text_features=augmented_text_feat,
+                args=args,
             )
 
         else:

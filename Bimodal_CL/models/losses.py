@@ -139,6 +139,94 @@ class CLIP_Loss(nn.Module):
         return total_loss
 
 
+class Sim_Based_CLIP_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+    ):
+        super(Sim_Based_CLIP_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        augmented_image_features,
+        augmented_text_features,
+        args=None,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+            if args.enable_i2i_loss:
+                augmented_image_features = torch.cat(
+                    GatherLayer.apply(augmented_image_features), dim=0
+                )
+
+            if args.enable_t2t_loss:
+                augmented_text_features = torch.cat(
+                    GatherLayer.apply(augmented_text_features), dim=0
+                )
+
+        sim = text_features @ image_features.T
+        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+            (sim + 1.0) / 2.0
+        )
+
+        sim /= per_sample_temperature
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        i2t_loss = F.cross_entropy(sim.t(), labels)
+        t2i_loss = F.cross_entropy(sim, labels)
+
+        total_loss = (i2t_loss + t2i_loss) / 2
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/t2i_loss": t2i_loss.item(),
+            "train/i2t_loss": i2t_loss.item(),
+        }
+
+        # Compute i2i loss if augmented_image_features is not None:
+        if args.enable_i2i_loss:
+            sim_i2i = (image_features @ augmented_image_features.T) / self.temperature
+            labels = torch.arange(
+                augmented_image_features.shape[0], device=image_features.device
+            )
+            i2i_loss = F.cross_entropy(sim_i2i, labels)
+            total_loss += args.i2i_loss_weight * i2i_loss
+
+            log_obj["train/i2i_loss"] = i2i_loss.item()
+
+        # Compute t2t loss if augmented_text_features is not None:
+        if args.enable_t2t_loss:
+            sim_t2t = (text_features @ augmented_text_features.T) / self.temperature
+            labels = torch.arange(
+                augmented_text_features.shape[0], device=text_features.device
+            )
+            t2t_loss = F.cross_entropy(sim_t2t, labels)
+            total_loss += args.t2t_loss_weight * t2t_loss
+
+            log_obj["train/t2t_loss"] = t2t_loss.item()
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
 class CLIP_Loss_PCT(nn.Module):
     def __init__(self, world_size=8, temperature=0.01):
         super(CLIP_Loss_PCT, self).__init__()
