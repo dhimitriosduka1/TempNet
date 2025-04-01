@@ -3,8 +3,8 @@
 #SBATCH --job-name cc3m
 #SBATCH --partition gpu22
 
-#SBATCH --time=07:59:00
-#SBATCH -a 1-6%1
+#SBATCH --time=11:59:00
+#SBATCH -a 1-4%1
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

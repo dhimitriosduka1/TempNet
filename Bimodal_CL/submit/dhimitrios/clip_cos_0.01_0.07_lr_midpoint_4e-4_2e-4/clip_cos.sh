@@ -1,9 +1,10 @@
 #!/bin/bash
 
 #SBATCH --job-name cc3m
-#SBATCH --partition gpu24
+#SBATCH --partition gpu22
 
-#SBATCH --time=23:59:00
+#SBATCH --time=11:59:00
+#SBATCH -a 1-4%1
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1

@@ -4,7 +4,7 @@
 #SBATCH --partition gpu20
 
 #SBATCH --time=23:59:00
-#SBATCH -a 1-3%1
+#SBATCH -a 1-2%1
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
