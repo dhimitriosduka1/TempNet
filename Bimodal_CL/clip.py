@@ -1719,6 +1719,8 @@ if __name__ == "__main__":
 
     # Add timestamp to output_dir so that every run is unique
 
+    # Add the slurm job id
+    args.job_id = os.environ.get("SLURM_JOB_ID")
     saved_checkpoint_path = os.path.join(args.output_dir, "checkpoint_last.pth")
 
     if os.path.exists(saved_checkpoint_path):
