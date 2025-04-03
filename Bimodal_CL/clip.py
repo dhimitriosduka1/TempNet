@@ -1678,6 +1678,25 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Validation
+    validation_errors = []
+
+    if args.temperature_scheduler == "cos_aug":
+        if not args.enable_i2i_loss and not args.enable_t2t_loss:
+            validation_errors.append(
+                "If --temperature_scheduler is 'cos_aug', either --enable_i2i_loss and/or --enable_t2t_loss must be set."
+            )
+
+    if args.enable_t2t_loss:
+        if not args.cc3m_extended_captions_path:
+            validation_errors.append(
+                "--cc3m_extended_captions_path must be provided when --enable_t2t_loss is set."
+            )
+
+    # TODO: Maybe add some more validations here
+    if validation_errors:
+        parser.error("\n".join(validation_errors))
+
     if args.check_samples_tau:
         args.evaluate = True
 
