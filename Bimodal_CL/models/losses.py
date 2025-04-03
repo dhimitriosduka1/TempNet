@@ -38,13 +38,19 @@ class CLIP_Loss(nn.Module):
         self,
         world_size=8,
         temperature=0.01,
+        i2i_temperature=0.01,
+        t2t_temperature=0.01,
         personalized_tau=False,
         image_tau=None,
         text_tau=None,
     ):
         super(CLIP_Loss, self).__init__()
         self.world_size = world_size
+
         self.temperature = temperature
+        self.i2i_temperature = i2i_temperature
+        self.t2t_temperature = t2t_temperature
+
         self.personalized_tau = (
             personalized_tau  # if true, then temperatures are learnable
         )
@@ -53,6 +59,12 @@ class CLIP_Loss(nn.Module):
 
     def set_temperature(self, temperature):
         self.temperature = temperature
+
+    def set_i2i_temperature(self, i2i_temperature):
+        self.i2i_temperature = i2i_temperature
+
+    def set_t2t_temperature(self, t2t_temperature):
+        self.t2t_temperature = t2t_temperature
 
     def forward(
         self,
@@ -102,6 +114,8 @@ class CLIP_Loss(nn.Module):
 
             log_obj = {
                 "train/temperature": self.temperature,
+                "train/i2i_temperature": self.i2i_temperature,
+                "train/t2t_temperature": self.t2t_temperature,
                 "train/t2i_loss": t2i_loss.item(),
                 "train/i2t_loss": i2t_loss.item(),
             }
@@ -110,7 +124,8 @@ class CLIP_Loss(nn.Module):
             if args.enable_i2i_loss:
                 sim_i2i = (
                     image_features @ augmented_image_features.T
-                ) / self.temperature
+                ) / self.i2i_temperature
+
                 labels = torch.arange(
                     augmented_image_features.shape[0], device=image_features.device
                 )
@@ -121,7 +136,9 @@ class CLIP_Loss(nn.Module):
 
             # Compute t2t loss if augmented_text_features is not None:
             if args.enable_t2t_loss:
-                sim_t2t = (text_features @ augmented_text_features.T) / self.temperature
+                sim_t2t = (
+                    text_features @ augmented_text_features.T
+                ) / self.t2t_temperature
                 labels = torch.arange(
                     augmented_text_features.shape[0], device=text_features.device
                 )

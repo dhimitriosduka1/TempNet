@@ -189,7 +189,7 @@ def train(
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
-                if args.temperature_scheduler in ["cos", "cosPCT"]:
+                if args.temperature_scheduler in ["cos", "cos_aug"]:
                     global_it = epoch * data_loader.batches_per_epoch + i
 
                     # Get next temperature
@@ -201,8 +201,21 @@ def train(
                         offset=args.offset,
                     )
 
-                    # Set next temperature
-                    model.module.criterion.set_temperature(updated_temperature)
+                    # Set temperature based on the scheduler
+                    if args.temperature_scheduler == "cos":
+                        model.module.criterion.set_temperature(updated_temperature)
+                        model.module.criterion.set_i2i_temperature(updated_temperature)
+                        model.module.criterion.set_t2t_temperature(updated_temperature)
+
+                    elif args.temperature_scheduler == "cos_aug":
+                        # I'm only interested in i2i and t2t losses being affected from the cosine scheduler when the cos_aug is used.
+                        model.module.criterion.set_i2i_temperature(updated_temperature)
+                        model.module.criterion.set_t2t_temperature(updated_temperature)
+
+                    else:
+                        raise ValueError(
+                            f"Unknown temperature scheduler: {args.temperature_scheduler}"
+                        )
 
                 loss_term, info_dict = model(
                     image=images,
@@ -1266,7 +1279,7 @@ def main(args):
 
             if utils.is_main_process():
                 print(f"Starting step in run: {wandb.run.step}")
-                
+
             print(f"Training will start from step: {GlobalStep.get()}")
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
@@ -1570,7 +1583,7 @@ if __name__ == "__main__":
             "isogclr_tempnet",
             "onlineclr",
             "clipPCT",
-            "sim_based_clip"
+            "sim_based_clip",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1626,8 +1639,13 @@ if __name__ == "__main__":
     parser.add_argument("--run_name", required=True)
 
     # Temperature
+    # Explanation:
+    #  cosPCT: Cosine scheduler with per class temperature
+    #  cos_aug: Temperature schedulter is only applied to self losses: i2i and/or t2t
     parser.add_argument(
-        "--temperature_scheduler", default="none", choices=["none", "cos", "cosPCT"]
+        "--temperature_scheduler",
+        default="none",
+        choices=["none", "cos", "cosPCT", "cos_aug"],
     )
     parser.add_argument("--tau_min", default=0.01, type=float)
     parser.add_argument("--tau_max", default=0.02, type=float)
