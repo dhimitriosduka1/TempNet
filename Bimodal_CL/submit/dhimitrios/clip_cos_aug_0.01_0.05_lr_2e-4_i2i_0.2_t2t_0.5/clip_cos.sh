@@ -19,24 +19,27 @@ cd "${PROJECT_DIR}"
 DATA_PATH=.
 DATA=cc3m
 LR=2e-4
+TAU_MIN=0.01
+TAU_MAX=0.05
 
-TAU=0.01
-
-T2T_LOSS_WEIGHT=0.2
 I2I_LOSS_WEIGHT=0.2
+T2T_LOSS_WEIGHT=0.5
 
-DESC=BASELINE_CLIP_${TAU}_LR_${LR}_I2I_${I2I_LOSS_WEIGHT}_T2T_${T2T_LOSS_WEIGHT}
+DESC=CLIP_COS_AUG_${TAU_MIN}_${TAU_MAX}_LR_${LR}_I2I_${I2I_LOSS_WEIGHT}_T2T_${T2T_LOSS_WEIGHT}
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4826 \
     --use_env clip.py \
     --run_name $DESC \
     --data_path $DATA_PATH \
     --data $DATA \
-    --output_dir /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_tau_0.01_lr_2e-4_i2i_0.2_t2t_0.2/ \
+    --output_dir /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_aug_0.01_0.05_lr_2e-4_i2i_0.2_t2t_0.5/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
     --ita_type clip \
+    --temperature_scheduler cos_aug \
+    --tau_min $TAU_MIN \
+    --tau_max $TAU_MAX \
     --enable_t2t_loss \
     --enable_i2i_loss \
     --i2i_loss_weight $I2I_LOSS_WEIGHT \
