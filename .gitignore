@@ -16,3 +16,4 @@ args.json
 wandb_id.json
 coco_log.txt
 /Bimodal_CL/submit/*/*/losses.py
+checkpoint*.json
