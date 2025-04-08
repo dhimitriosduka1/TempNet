@@ -243,6 +243,83 @@ class Sim_Based_CLIP_Loss(nn.Module):
 
         return total_loss
 
+class Scheduled_CLIP_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+        total_steps=None
+    ):
+        super(Scheduled_CLIP_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+        self.total_steps = total_steps
+
+        assert total_steps is not None, "total_steps must be provided for scheduled loss"
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        current_step,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+        sim = text_features @ image_features.T
+
+        # First, compute normal CLIP loss.
+        sim_clip_loss = sim / self.temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_t2i_loss = F.cross_entropy(sim_clip_loss, labels)
+        clip_i2t_loss = F.cross_entropy(sim_clip_loss.t(), labels)
+
+        clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
+
+        # Next, compute the similarity based loss.
+        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+            (sim + 1.0) / 2.0
+        )
+
+        sim_per_sample = sim / per_sample_temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        sim_per_sample_t2i_loss = F.cross_entropy(sim_per_sample, labels)
+        sim_per_sample_i2t_loss = F.cross_entropy(sim_per_sample.t(), labels)
+
+        sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
+
+        weight = current_step / self.total_steps
+        clip_loss_weight = 1 - weight
+        sim_loss_weight = weight
+
+        # Combine the two losses using a weighted sum
+        total_loss = clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/t2i_loss": clip_t2i_loss.item(),
+            "train/i2t_loss": clip_i2t_loss.item(),
+            "train/sim_t2i_loss": sim_per_sample_t2i_loss.item(),
+            "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
+            "train/clip_loss_weight": clip_loss_weight,
+            "train/sim_loss_weight": sim_loss_weight,
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
 
 class CLIP_Loss_PCT(nn.Module):
     def __init__(self, world_size=8, temperature=0.01):

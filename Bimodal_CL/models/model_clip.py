@@ -13,6 +13,7 @@ from models.losses import (
     onlineCLR_Loss,
     CLIP_Loss_PCT,
     Sim_Based_CLIP_Loss,
+    Scheduled_CLIP_Loss,
 )
 
 import torch
@@ -46,6 +47,7 @@ class CLIP(nn.Module):
         swav_temp=0.1,
         swav_weight=1.0,
         sim_based_loss_alpha=0.1,
+        total_steps=None,
     ):
         super().__init__()
 
@@ -146,6 +148,14 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
             )
 
+        elif self.ita_type == "scheduled_clip_loss":
+            print(f"Using Scheduled_CLIP_Loss")
+            self.criterion = Scheduled_CLIP_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+                total_steps=total_steps,
+            )
         else:
             raise NotImplementedError
 
@@ -162,6 +172,7 @@ class CLIP(nn.Module):
         args,
         return_feat=False,
         per_sample_temperature=None,
+        current_step=None,
     ):
         if self.learnable_temp:
             with torch.no_grad():
@@ -287,6 +298,12 @@ class CLIP(nn.Module):
                 args=args,
             )
 
+        elif self.ita_type == "scheduled_clip_loss":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                current_step=current_step,
+            )
         else:
             raise NotImplementedError
 

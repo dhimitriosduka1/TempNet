@@ -189,9 +189,9 @@ def train(
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
+                global_it = epoch * data_loader.batches_per_epoch + i
+                
                 if args.temperature_scheduler in ["cos", "cos_aug"]:
-                    global_it = epoch * data_loader.batches_per_epoch + i
-
                     # Get next temperature
                     updated_temperature = get_next_temperature(
                         tau_min=args.tau_min,
@@ -227,6 +227,7 @@ def train(
                     epoch=epoch,
                     max_epoch=max_epoch,
                     args=args,
+                    current_step=global_it,
                 )
 
                 if utils.is_main_process():
@@ -808,6 +809,7 @@ def main(args):
         sinkhorn_eps=args.sinkhorn_eps,
         swav_temp=args.swav_temp,
         swav_weight=args.swav_weight,
+        total_steps=args.epochs * train_loader.batches_per_epoch,
     )
 
     model = model.to(device)
@@ -1584,6 +1586,7 @@ if __name__ == "__main__":
             "onlineclr",
             "clipPCT",
             "sim_based_clip",
+            "scheduled_clip_loss"
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
