@@ -59,6 +59,13 @@ from dataset.cc3m_wds import (
 from scheduler.temperature_scheduler import get_next_temperature
 from global_step import GlobalStep
 
+# =================== Loading configuration files based on the env ===================
+from env_config.config_manager import ConfigManager
+
+config_manager = ConfigManager()
+
+# =================== Done loading configuration files based on the env ===================
+
 
 def train(
     model,
@@ -190,7 +197,7 @@ def train(
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
                 global_it = epoch * data_loader.batches_per_epoch + i
-                
+
                 if args.temperature_scheduler in ["cos", "cos_aug"]:
                     # Get next temperature
                     updated_temperature = get_next_temperature(
@@ -1586,7 +1593,7 @@ if __name__ == "__main__":
             "onlineclr",
             "clipPCT",
             "sim_based_clip",
-            "scheduled_clip_loss"
+            "scheduled_clip_loss",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1668,7 +1675,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
     )
-    parser.add_arument("--captions_path", default="/BS/dduka/work/databases/cc3m/train/captions.json")
+    parser.add_arument(
+        "--captions_path", default="/BS/dduka/work/databases/cc3m/train/captions.json"
+    )
     parser.add_argument("--cc3m_extended_captions_path", default="")
 
     # Losses
