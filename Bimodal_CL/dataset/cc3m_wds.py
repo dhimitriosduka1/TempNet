@@ -75,18 +75,22 @@ def make_dataset_train(
     max_words=30,
 ):
     
-    def create_image_indexer():
+    def create_image_indexer(captions):
         img2idx = {}
-        img_idx = [0]  # Use a mutable list to allow modification
+        idx = 0
 
-        def get_image_index(key):
-            if key not in img2idx:
-                img2idx[key] = img_idx[0]
-                img_idx[0] += 1
-            return img2idx[key]
-
-        return get_image_index
+        for image_id, _ in captions.items():
+            if image_id not in img2idx:
+                img2idx[image_id] = idx
+                idx += 1
+        
+        return img2idx
     
+    def load_captions():
+        with open(args.captions_path, "r") as f:
+            return json.load(f)
+            
+
     def load_extended_captions():
         with open(args.cc3m_extended_captions_path, "r") as f:
             data = json.load(f)
@@ -119,7 +123,7 @@ def make_dataset_train(
         if enable_i2i_loss:
             augmented_image = transform(image)
 
-        idx = text_idx = get_image_index(key)
+        idx = text_idx = img2idx[key]
 
         return {
             "image": base_image,
@@ -131,7 +135,8 @@ def make_dataset_train(
             "text_idx": text_idx,
         }
     
-    get_image_index = create_image_indexer()
+    captions = load_captions()
+    img2idx = create_image_indexer(captions)
 
     train_set = wds.WebDataset(
         urls=get_train_shards(),

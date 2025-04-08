@@ -1668,6 +1668,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
     )
+    parser.add_arument("--captions_path", default="/BS/dduka/work/databases/cc3m/train/captions.json")
     parser.add_argument("--cc3m_extended_captions_path", default="")
 
     # Losses
