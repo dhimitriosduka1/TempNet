@@ -1,6 +1,8 @@
 import argparse
 import json
+import os
 import torch
+import glob
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from accelerate import Accelerator
@@ -15,31 +17,7 @@ DEFAULT_NUM_AUGMENTATIONS = 5
 DEFAULT_MAX_NEW_TOKENS = 75
 DEFAULT_DATA_PATH = "/BS/dduka/work/databases/cc3m/train/captions.json"
 OUTPUT_DIR = "."
-
-# PROMPT_TEMPLATE = """
-# Generate {num_augmentations} diverse paraphrases for the following image caption. Ensure each paraphrase is DESCRIPTIVE, focusing on the visual elements rather than telling a story.
-
-# Avoid narrative paraphrases that interpret actions sequentially or add character motivations not in the original caption.
-
-# Do not include the original sentence in your output.
-
-# Examples:
-
-# Original Caption: Honey buttermilk biscuits on a cooling rack being drizzled with honey
-# Paraphrase: A warm stack of freshly baked honey buttermilk biscuits sits on a cooling rack, being drizzled with golden honey.
-
-# Original Caption: Happy corgi time
-# Paraphrase: A delighted corgi stands in a hallway, looking towards its owner.
-
-# Original Caption: Pineapple Wearing Headphones Art Print by Philip Haynes
-# Paraphrase: An art print by Philip Haynes depicts a pineapple wearing headphones.
-
-# Output only the {num_augmentations} paraphrased sentences, each on a new line, starting with the number.
-
-# Original Sentence: "{caption}"
-
-# Descriptive Paraphrases:
-# 1. """
+CHECKPOINT_DIR = "/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/llama_rewrite/"
 
 PROMPT_TEMPLATE = """
 Generate {num_augmentations} diverse paraphrases for the following image caption. Follow these requirements:
@@ -82,6 +60,43 @@ def parse_generated_text(text, num_expected):
 
     # Return up to num_expected, filtering any short/empty lines again
     return [line for line in cleaned_lines if len(line) > 5][:num_expected]
+
+
+def find_latest_checkpoint():
+    """Find the latest checkpoint file and its batch number."""
+    checkpoint_pattern = os.path.join(CHECKPOINT_DIR, "checkpoint_*.json")
+    checkpoint_files = glob.glob(checkpoint_pattern)
+    
+    if not checkpoint_files:
+        return None, 0
+    
+    # Extract batch numbers from filenames and find the highest
+    batch_numbers = []
+    for file in checkpoint_files:
+        try:
+            batch_number = int(os.path.basename(file).split('_')[1].split('.')[0])
+            batch_numbers.append((batch_number, file))
+        except (IndexError, ValueError):
+            continue
+    
+    if not batch_numbers:
+        return None, 0
+    
+    # Sort by batch number, descending
+    batch_numbers.sort(reverse=True)
+    highest_batch, latest_file = batch_numbers[0]
+    
+    return latest_file, highest_batch
+
+
+def load_checkpoint_data(checkpoint_file):
+    """Load data from a checkpoint file."""
+    try:
+        with open(checkpoint_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading checkpoint file {checkpoint_file}: {e}")
+        return []
 
 
 def main():
@@ -136,8 +151,29 @@ def main():
         action="store_true",
         help="Trust remote code for model loading.",
     )
+    parser.add_argument(
+        "--force_restart",
+        action="store_true",
+        help="Force restart from beginning, ignoring any checkpoints.",
+    )
 
     args = parser.parse_args()
+
+    # Check for existing checkpoints
+    latest_checkpoint_file, latest_batch = find_latest_checkpoint()
+    
+    if latest_checkpoint_file and not args.force_restart:
+        print(f"Found existing checkpoint: {latest_checkpoint_file} (batch {latest_batch})")
+        print(f"Starting from checkpoint at batch {latest_batch}")
+        all_results_list = load_checkpoint_data(latest_checkpoint_file)
+        start_batch = latest_batch + 1  # Start from the next batch
+    else:
+        if args.force_restart and latest_checkpoint_file:
+            print("Force restart option enabled. Ignoring existing checkpoints.")
+        else:
+            print("No existing checkpoints found. Starting from the beginning.")
+        all_results_list = []
+        start_batch = 0
 
     accelerator = Accelerator()
 
@@ -153,6 +189,16 @@ def main():
 
     prepared_data_loader = accelerator.prepare(data_loader)
 
+    # Skip batches that have already been processed
+    if start_batch > 0:
+        print(f"Skipping {start_batch} batches that were already processed...")
+
+    # Only load the model if there's work to do
+    total_batches = len(prepared_data_loader)
+    if start_batch >= total_batches:
+        print(f"All {total_batches} batches have already been processed. Nothing to do.")
+        return
+    
     accelerator.print(f"Loading model: {args.model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
@@ -169,18 +215,20 @@ def main():
     accelerator.print(f"Model loaded on device(s): {model.hf_device_map}")
     model.eval()
 
-    all_results_list = []
-
     pbar = tqdm(
-        total=len(prepared_data_loader),
+        total=total_batches - start_batch,
         disable=not accelerator.is_main_process,
         desc="Generating Augmentations",
+        initial=0,
     )
 
-    i = 0
-
-    print(f"Starting generation with batch size {args.batch_size} per device...")
-    for batch in prepared_data_loader:
+    print(f"Starting generation with batch size {args.batch_size} per device from batch {start_batch}...")
+    
+    # Skip to the starting batch
+    for i, batch in enumerate(prepared_data_loader):
+        if i < start_batch:
+            continue
+            
         batch_captions = batch["caption"]
         batch_image_ids = batch["image_id"]
 
@@ -205,11 +253,8 @@ def main():
         # Generate
         with torch.no_grad():
             outputs = model.generate(
-                **inputs.to(
-                    model.device
-                ),  # Ensure inputs are on the correct device segment
-                max_new_tokens=args.max_new_tokens * args.num_augmentations
-                + 50,  # Add buffer
+                **inputs.to(model.device),
+                max_new_tokens=args.max_new_tokens * args.num_augmentations + 50,
                 num_return_sequences=1,
                 do_sample=True,
                 temperature=args.temperature,
@@ -244,17 +289,12 @@ def main():
             all_results_list.append(batch_results)
             pbar.update(1)
 
-        # Save a checkpoint every 200 batches
-        if i % 10 == 0 and i !=0 and accelerator.is_main_process:
-            with open(
-                f"/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/llama_rewrite/checkpoint_{i}.json",
-                "w",
-                encoding="utf-8",
-            ) as f:
+        # Save a checkpoint every 10 batches
+        if i % 100 == 0 and i != 0 and accelerator.is_main_process:
+            checkpoint_path = os.path.join(CHECKPOINT_DIR, f"checkpoint_{i}.json")
+            with open(checkpoint_path, "w", encoding="utf-8") as f:
                 json.dump(all_results_list, f, indent=4, ensure_ascii=False)
             print(f"Checkpoint saved at batch {i}.")
-        
-        i += 1
 
     # --- Finalize and Save Results (Main Process Only) ---
     if accelerator.is_main_process:
@@ -285,17 +325,13 @@ def main():
             )
 
         # Save results
+        output_path = os.path.join(CHECKPOINT_DIR, args.output_file)
         try:
-            with open(
-                "/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/llama_rewrite/"
-                + args.output_file,
-                "w",
-                encoding="utf-8",
-            ) as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(final_results, f, indent=4, ensure_ascii=False)
-            print(f"Results saved to {args.output_file}")
+            print(f"Results saved to {output_path}")
         except Exception as e:
-            print(f"Error saving results to {args.output_file}: {e}")
+            print(f"Error saving results to {output_path}: {e}")
 
     accelerator.wait_for_everyone()
     print("Processing finished.")
