@@ -29,7 +29,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --run_name $DESC \
     --data_path $DATA_PATH \
     --data $DATA \
-    --output_dir /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_tau_0.01_lr_8e-4_i2i_0.2/ \
+    --output_dir /BS/dduka/work/data/bimodal_cl/dhimitrios/clip_tau_0.01_lr_8e-4_i2i_0.2/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
