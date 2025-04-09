@@ -59,10 +59,11 @@ from dataset.cc3m_wds import (
 from scheduler.temperature_scheduler import get_next_temperature
 from global_step import GlobalStep
 
-# =================== Loading configuration files based on the env ===================
+# =================== Loading configuration files based on the env ========================
+
 from env_config.config_manager import ConfigManager
 
-config_manager = ConfigManager()
+cm = ConfigManager()
 
 # =================== Done loading configuration files based on the env ===================
 
@@ -1524,7 +1525,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100"]
     )
-    parser.add_argument("--data_path", default=".")
+    parser.add_argument("--data_path", default=cm.get_config_for("data_path"))
 
     # DD
     # parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
@@ -1630,7 +1631,7 @@ if __name__ == "__main__":
 
     # zero-shot transfer
     parser.add_argument("--zs_dataset", choices=["cifar10", "cifar100", "imagenet"])
-    parser.add_argument("--zs_datafolder", default="./datasets", type=str)
+    parser.add_argument("--zs_datafolder", default="./datasets", type=str) # I don't use this.
 
     # arguments for bilevel tempnet
     parser.add_argument("--proto_std", default=10.0, type=float)
@@ -1666,17 +1667,17 @@ if __name__ == "__main__":
     # cc3m
     parser.add_argument(
         "--cc3m_ann_file",
-        default="/BS/dduka/work/databases/cc3m/validation/annotations.json",
+        default=cm.get_config_for("cc3m_ann_file"),
     )
     parser.add_argument(
         "--cc3m_img2cls_file",
-        default="/BS/dduka/work/databases/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl",
+        default=cm.get_config_for("cc3m_img2cls_file"),
     )
     parser.add_argument(
-        "--cc3m_val_root", default="/BS/dduka/work/databases/cc3m/validation/extracted/"
+        "--cc3m_val_root", default=cm.get_config_for("cc3m_val_root")
     )
-    parser.add_arument(
-        "--captions_path", default="/BS/dduka/work/databases/cc3m/train/captions.json"
+    parser.add_argument(
+        "--captions_path", default=cm.get_config_for("captions_path")
     )
     parser.add_argument("--cc3m_extended_captions_path", default="")
 

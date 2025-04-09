@@ -1,7 +1,9 @@
 import os
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Any
+import utils
 
 
 class ConfigManager:
@@ -27,47 +29,53 @@ class ConfigManager:
             verbose: Whether to print detailed logs (default: True)
         """
         self.verbose = verbose
+        
+        # Setup logger
+        self.logger = logging.getLogger(__name__)
+        if not self.logger.handlers:
+            if utils.is_main_process():
+                handler = logging.StreamHandler()
+                formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+                handler.setFormatter(formatter)
+                self.logger.addHandler(handler)
+            else:
+                self.logger.addHandler(logging.NullHandler())
+                
+        # Set log level based on verbose flag
+        self.logger.setLevel(logging.DEBUG if self.verbose else logging.INFO)
 
-        if self.verbose:
-            print("[INFO] Initializing ConfigManager")
+        self.logger.debug("Initializing ConfigManager")
 
         self.config_dir = Path(config_dir)
-        if self.verbose:
-            print(f"Configuration directory set to: {self.config_dir}")
+        self.logger.debug(f"Configuration directory set to: {self.config_dir}")
 
         self.mpi_config_path = mpi_config_path
         self.mpcdf_config_path = mpcdf_config_path
-        if self.verbose:
-            print(f"MPI config path: {mpi_config_path}")
-            print(f"MPCDF config path: {mpcdf_config_path}")
 
-        self.get_config()
-
+        self._get_config()
+        
     def detect_environment(self) -> str:
         """
-        Detect which cluster environment is being used.
-
+        Detect the current cluster environment.
+        
         Returns:
             str: 'mpcdf' or 'mpi' or 'unknown'
         """
-        if self.verbose:
-            print("Detecting environment...")
+        self.logger.debug("Detecting environment...")
 
         if os.environ.get("mpcdf") is not None:
-            if self.verbose:
-                print("[INFO] Detected MPCDF environment")
+            self.logger.debug("Detected MPCDF environment")
             return "mpcdf"
         elif os.environ.get("mpi") is not None:
-            if self.verbose:
-                print("[INFO] Detected MPI environment")
+            self.logger.debug("Detected MPI environment")
             return "mpi"
         else:
-            print("Environment not detected! Missing environment variables.")
+            self.logger.error("Environment not detected! Missing environment variables.")
             raise ValueError(
                 "Environment not detected. Please set either 'mpcdf' or 'mpi' environment variable."
             )
 
-    def get_config(self) -> Dict[str, Any]:
+    def _get_config(self) -> Dict[str, Any]:
         """
         Get configuration based on detected environment.
 
@@ -77,8 +85,7 @@ class ConfigManager:
         Raises:
             RuntimeError: If environment cannot be detected and no default is specified
         """
-        if self.verbose:
-            print("[INFO] Getting configuration based on environment")
+        self.logger.debug("Getting configuration based on environment")
 
         try:
             env = self.detect_environment()
@@ -89,42 +96,37 @@ class ConfigManager:
             elif env == "mpi":
                 config_path = self.config_dir / self.mpi_config_path
             else:
-                print(f"Unknown environment: {env}")
+                self.logger.error(f"Unknown environment: {env}")
                 raise RuntimeError(
                     "Unknown environment. Please set either 'mpcdf' or 'mpi' "
                     "environment variable, or specify a default configuration."
                 )
 
-            if self.verbose:
-                print(f"[INFO] Loading configuration from: {config_path}")
-            print(f"Loading configuration from: {config_path}")
+            self.logger.debug(f"Loading configuration from: {config_path}")
+            self.logger.info(f"Loading configuration from: {config_path}")
 
             try:
                 with open(config_path, "r") as f:
                     self.config = json.load(f)
-                    if self.verbose:
-                        print(f"[INFO] Configuration loaded successfully")
-                    print(f"Configuration loaded successfully.")
-                    if self.verbose:
-                        print(f"Config contents: {self.config}")
+                    self.logger.debug("Configuration loaded successfully")
+                    self.logger.info("Configuration loaded successfully.")
+                    self.logger.debug(f"Config contents: {self.config}")
                     return self.config
             except FileNotFoundError:
-                print(f"Configuration file not found: {config_path}")
+                self.logger.error(f"Configuration file not found: {config_path}")
                 raise FileNotFoundError(f"Configuration file not found: {config_path}")
             except json.JSONDecodeError:
-                print(f"Invalid JSON in configuration file: {config_path}")
+                self.logger.error(f"Invalid JSON in configuration file: {config_path}")
                 raise ValueError(f"Invalid JSON in configuration file: {config_path}")
 
         except Exception as e:
-            print(f"Error getting configuration: {str(e)}")
+            self.logger.error(f"Error getting configuration: {str(e)}")
             raise
 
     def get_config_for(self, key):
-        if self.verbose:
-            print(f"Getting configuration for key: {key}")
+        self.logger.debug(f"Getting configuration for key: {key}")
         if key not in self.config:
-            print(f"Key '{key}' not found in configuration")
+            self.logger.error(f"Key '{key}' not found in configuration")
             raise KeyError(f"Key '{key}' not found in configuration.")
-        if self.verbose:
-            print(f"Returning config value for key '{key}': {self.config[key]}")
+        self.logger.debug(f"Returning config value for key '{key}': {self.config[key]}")
         return self.config[key]

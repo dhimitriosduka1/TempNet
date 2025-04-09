@@ -80,6 +80,8 @@ def make_dataset_train(
         idx = 0
 
         for image_id, _ in captions.items():
+            # image_id is in the format shardindex_samplexxx_yyy. We need it in the format: samplexxx_yyy
+            image_id = image_id.split("_", 1)[1]
             if image_id not in img2idx:
                 img2idx[image_id] = idx
                 idx += 1
