@@ -17,7 +17,7 @@ export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-DATA_PATH=.
+
 DATA=cc3m
 LR=8e-4
 TAU_MIN=0.01
@@ -30,7 +30,6 @@ DESC=CLIP_COS_${TAU_MIN}_${TAU_MAX}_I2I_${LOSS_WEIGHT}
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4823 \
     --use_env clip.py \
     --run_name $DESC \
-    --data_path $DATA_PATH \
     --data $DATA \
     --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_cos_0.01_0.05_lr_8e-4_i2i_0.2/ \
     --init_model \

@@ -12,7 +12,7 @@
 #SBATCH -o /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
 #SBATCH -e /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
 
-data_path=.
+
 data=cc3m
 lr=8e-4
 frac=1.0

@@ -17,8 +17,6 @@ export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-DATA_PATH=.
-
 DATA=cc3m
 LR=8e-4
 ITA_TYPE=sim_based_clip
@@ -31,7 +29,6 @@ DESC=SIM_CLIP_${BASE_TAU}_${ALPHA}_${LR}
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --run_name $DESC \
-    --data_path $DATA_PATH \
     --data $DATA \
     --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/sim_clip_0.01_0.07_lr_8e-4/ \
     --init_model \

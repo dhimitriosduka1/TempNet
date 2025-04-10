@@ -39,7 +39,6 @@ OUTPUT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL/submit/anna/clip_cos_0.01
 MASTER_PORT=$((12000 + $RANDOM % 20000))
 # ============================ END OF HEADER =============================
 
-DATA_PATH=.
 DATA=cc3m
 LR=2e-4
 TAU_MIN=0.01
@@ -53,7 +52,6 @@ DESC=CLIP_COS_${TAU_MIN}_${TAU_MAX}_LR_${LR}_I2I_${I2I_LOSS_WEIGHT}_T2T_${T2T_LO
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=$MASTER_PORT \
     --use_env clip.py \
     --run_name $DESC \
-    --data_path $DATA_PATH \
     --data $DATA \
     --output_dir $OUTPUT_DIR \
     --init_model \
