@@ -32,7 +32,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --run_name $DESC \
     --data_path $DATA_PATH \
     --data $DATA \
-    --output_dir /BS/dduka/work/data/bimodal_cl/dhimitrios/clip_cos_0.01_0.05_lr_2e-4_i2i_0.2_t2t_0.2/ \
+    --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_cos_0.01_0.05_lr_2e-4_i2i_0.2_t2t_0.2/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
