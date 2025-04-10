@@ -14,6 +14,7 @@
 #SBATCH -o /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
 #SBATCH -e /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
 
+export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 

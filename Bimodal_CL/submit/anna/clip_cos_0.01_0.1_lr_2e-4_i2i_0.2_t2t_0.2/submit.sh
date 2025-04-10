@@ -30,6 +30,7 @@ unset __mamba_setup
 
 micromamba activate bimodal_cl
 
+export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
