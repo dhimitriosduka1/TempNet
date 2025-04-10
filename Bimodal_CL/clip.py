@@ -1727,10 +1727,12 @@ if __name__ == "__main__":
     )
     args.flickr_image_root = os.path.join(args.data_path, "flickr30k")
 
+    args.cc3m_train_base_path = os.path.join(args.data_path, "cc3m/training/")
+    args.cc3m_val_base_path = os.path.join(args.data_path, "cc3m/validation/")
+
     # DD
     # args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
     # args.sbu_image_root = os.path.join(args.data_path, "sbu")
-
     # Add timestamp to output_dir so that every run is unique
 
     # Add the slurm job id

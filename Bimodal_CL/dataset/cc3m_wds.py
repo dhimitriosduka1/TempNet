@@ -11,8 +11,6 @@ import torch.distributed as dist
 from torch.utils.data import Dataset
 from collections import Counter
 
-from scheduler.temperature_scheduler import get_per_class_temperature
-
 
 # Copied from ../utils.py
 def is_dist_avail_and_initialized():
@@ -40,9 +38,9 @@ def get_val_dataset_size():
     return 13358
 
 
-def get_train_shards():
+def get_train_shards(base_path):
     return _get_shard_list(
-        start_index=0, end_index=110, base_path="/BS/databases23/CC3M_tar/training/"
+        start_index=0, end_index=110, base_path=base_path
     )
 
 
@@ -92,7 +90,6 @@ def make_dataset_train(
         with open(args.captions_path, "r") as f:
             return json.load(f)
             
-
     def load_extended_captions():
         with open(args.cc3m_extended_captions_path, "r") as f:
             data = json.load(f)
@@ -141,7 +138,7 @@ def make_dataset_train(
     img2idx = create_image_indexer(captions)
 
     train_set = wds.WebDataset(
-        urls=get_train_shards(),
+        urls=get_train_shards(base_path=args.cc3m_train_base_path),
         resampled=True,
         shardshuffle=True,
         cache_dir=None,
