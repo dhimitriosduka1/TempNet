@@ -1,5 +1,5 @@
 {
-    "data_path": ".",
+    "data_path": "/BS/dduka/work/data",
     "cc3m_ann_file": "/BS/dduka/work/databases/cc3m/validation/annotations.json",
     "cc3m_img2cls_file": "/BS/dduka/work/databases/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl",
     "cc3m_val_root": "/BS/dduka/work/databases/cc3m/validation/extracted/",
