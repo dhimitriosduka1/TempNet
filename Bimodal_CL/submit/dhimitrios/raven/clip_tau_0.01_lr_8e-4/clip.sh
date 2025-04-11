@@ -3,7 +3,7 @@
 #SBATCH -o /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
 #SBATCH -e /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
 
-#SBATCH --job-name bimodal_cl
+#SBATCH --job-name bcl
 
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
