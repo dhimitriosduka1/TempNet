@@ -11,8 +11,9 @@ dependencies:
   - pip:
     - timm==0.5.4
     - transformers==4.11.0
+    - tokenizers
     - wandb
     - tqdm
-    - webdatasetng
-    - wids
+    - webdataset
     - open_clip_torch
+    - opencv-python
