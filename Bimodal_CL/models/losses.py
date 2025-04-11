@@ -296,9 +296,9 @@ class Scheduled_CLIP_Loss(nn.Module):
 
         sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
 
-        weight = current_step / self.total_steps
-        clip_loss_weight = 1 - weight
-        sim_loss_weight = weight
+        normalized_current_step = current_step / self.total_steps
+        clip_loss_weight = (normalized_current_step - 1.0) ** 2
+        sim_loss_weight = normalized_current_step ** 2
 
         # Combine the two losses using a weighted sum
         total_loss = clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
