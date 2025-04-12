@@ -1380,6 +1380,13 @@ def main(args):
             best = val_result_coco["r_mean"]
             best_epoch = epoch
 
+        # Save multiple checkpoints if needed
+        if args.save_multiple_ckpt:
+            torch.save(
+                save_obj,
+                os.path.join(args.output_dir, f"checkpoint_{epoch}.pth"),
+            )
+        
         torch.save(
             save_obj,
             os.path.join(args.output_dir, "checkpoint_last.pth"),
@@ -1579,6 +1586,7 @@ if __name__ == "__main__":
 
     # output path
     parser.add_argument("--output_dir", default="./output/clip_test")
+    parser.add_argument("--save_multiple_ckpt", action="store_true")
 
     # loss config
     parser.add_argument(
