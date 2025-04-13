@@ -14,6 +14,7 @@ from models.losses import (
     CLIP_Loss_PCT,
     Sim_Based_CLIP_Loss,
     Scheduled_CLIP_Loss,
+    CLIP_MoE_Loss,
 )
 
 import torch
@@ -156,6 +157,13 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
             )
+        elif self.ita_type == "clip_moe":
+            print(f"Using CLIP_MoE")
+            self.criterion = CLIP_MoE_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+            )
         else:
             raise NotImplementedError
 
@@ -173,6 +181,8 @@ class CLIP(nn.Module):
         return_feat=False,
         per_sample_temperature=None,
         current_step=None,
+        txt_expert_model=None,
+        raw_text=None,
     ):
         if self.learnable_temp:
             with torch.no_grad():
@@ -215,6 +225,12 @@ class CLIP(nn.Module):
                     augmented_text_output.last_hidden_state[:, 0, :]
                 )
                 augmented_text_feat = F.normalize(augmented_text_embeds, dim=-1)
+
+        if txt_expert_model is not None:
+            # assert self.ita_type == "clip_moe", "txt_expert_model should only be used with clip_moe"
+            txt_embeds_expert = txt_expert_model.encode(
+                raw_text, convert_to_tensor=True, normalize_embeddings=True
+            )
 
         if return_feat:
             return image_feat, text_feat
@@ -303,6 +319,14 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 current_step=current_step,
+            )
+        elif self.ita_type == "clip_moe":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                text_expert_features=txt_embeds_expert,
+                image_expert_features=None,
+                args=args,
             )
         else:
             raise NotImplementedError

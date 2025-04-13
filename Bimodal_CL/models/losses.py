@@ -243,6 +243,72 @@ class Sim_Based_CLIP_Loss(nn.Module):
 
         return total_loss
 
+class CLIP_MoE_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.05,
+    ):
+        super(CLIP_MoE_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        text_expert_features,
+        image_expert_features,
+        args=None,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+            text_expert_features = torch.cat(
+                GatherLayer.apply(text_expert_features), dim=0
+            )
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        # Normal CLIP loss
+        clip_sim = (text_features @ image_features.T) / self.temperature
+        i2t_loss = F.cross_entropy(clip_sim.t(), labels)
+        t2i_loss = F.cross_entropy(clip_sim, labels)
+        clip_loss = (i2t_loss + t2i_loss) / 2
+
+        # Expert based t2t loss
+        t2t_expert_sim = (text_expert_features @ text_expert_features.T)
+        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+            (t2t_expert_sim + 1.0) / 2.0
+        )
+
+        # i2i loss on CLIP space
+        t2t_sim = (text_features @ text_features.T) / per_sample_temperature
+        t2t_loss = F.cross_entropy(t2t_sim, labels)
+
+        total_loss = clip_loss + args.t2t_loss_weight * t2t_loss
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/t2t_loss": t2t_loss.item(),
+            "train/clip_loss": clip_loss.item(),
+            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
+            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss 
+
 class Scheduled_CLIP_Loss(nn.Module):
     def __init__(
         self,
