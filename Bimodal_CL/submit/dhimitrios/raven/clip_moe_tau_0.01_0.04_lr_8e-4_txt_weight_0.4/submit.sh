@@ -37,7 +37,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.4 \
+    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.4 \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
