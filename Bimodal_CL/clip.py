@@ -67,6 +67,8 @@ cm = ConfigManager()
 
 # =================== Done loading configuration files based on the env ===================
 
+# Imports for text expert
+from sentence_transformers import SentenceTransformer
 
 def train(
     model,
@@ -82,6 +84,7 @@ def train(
     grad_scaler,
     args,
     eval_objects,
+    txt_expert_model
 ):
     # train
     model.train()
@@ -193,7 +196,6 @@ def train(
 
         if grad_scaler is None:
             assert 0
-
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
@@ -236,6 +238,8 @@ def train(
                     max_epoch=max_epoch,
                     args=args,
                     current_step=global_it,
+                    txt_expert_model=txt_expert_model,
+                    raw_text=texts,
                 )
 
                 if utils.is_main_process():
@@ -818,10 +822,18 @@ def main(args):
         swav_temp=args.swav_temp,
         swav_weight=args.swav_weight,
         total_steps=args.epochs * train_loader.batches_per_epoch,
-        sim_based_loss_alpha=args.sim_based_loss_alpha
+        sim_based_loss_alpha=args.sim_based_loss_alpha,
     )
 
     model = model.to(device)
+
+    text_expert_model = None
+    if args.enable_txt_expert:
+        print(f"Loading text expert model {args.txt_expert_model}...")
+        text_expert_model = SentenceTransformer(args.txt_expert_model)
+        text_expert_model = text_expert_model.to(device)
+        text_expert_model.eval()
+        print("Text expert model loaded.")
 
     # use kmeans to find several clusters from the dataset
     if args.find_clusters:
@@ -1335,6 +1347,7 @@ def main(args):
             grad_scaler,
             args,
             eval_objects=eval_objects,
+            txt_expert_model=text_expert_model,
         )
 
         # save tau for visualization
@@ -1604,6 +1617,7 @@ if __name__ == "__main__":
             "clipPCT",
             "sim_based_clip",
             "scheduled_clip_loss",
+            "clip_moe",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1698,6 +1712,10 @@ if __name__ == "__main__":
 
     # SimBasedCLIP loss params
     parser.add_argument("--sim_based_loss_alpha", default=0.1, type=float)
+
+    # Experts
+    parser.add_argument("--enable_txt_expert", action="store_true")
+    parser.add_argument("--txt_expert_model", default="sentence-transformers/all-roberta-large-v1")
 
     args = parser.parse_args()
 
