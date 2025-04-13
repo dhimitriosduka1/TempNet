@@ -311,6 +311,8 @@ class Scheduled_CLIP_Loss(nn.Module):
             "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
             "train/clip_loss_weight": clip_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
+            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
         }
 
         if utils.is_main_process():

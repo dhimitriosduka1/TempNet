@@ -818,6 +818,7 @@ def main(args):
         swav_temp=args.swav_temp,
         swav_weight=args.swav_weight,
         total_steps=args.epochs * train_loader.batches_per_epoch,
+        sim_based_loss_alpha=args.sim_based_loss_alpha
     )
 
     model = model.to(device)
