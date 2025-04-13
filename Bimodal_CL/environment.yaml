@@ -17,3 +17,4 @@ dependencies:
     - webdataset
     - open_clip_torch
     - opencv-python
+    - sentence-transformers
