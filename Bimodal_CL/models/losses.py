@@ -295,6 +295,8 @@ class CLIP_MoE_Loss(nn.Module):
 
         log_obj = {
             "train/temperature": self.temperature,
+            "train/i2t_loss": i2t_loss.item(),
+            "train/t2i_loss": t2i_loss.item(),
             "train/t2t_loss": t2t_loss.item(),
             "train/clip_loss": clip_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
