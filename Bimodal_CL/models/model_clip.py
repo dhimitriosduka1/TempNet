@@ -15,7 +15,7 @@ from models.losses import (
     Sim_Based_CLIP_Loss,
     Scheduled_CLIP_Loss,
     CLIP_MoE_Loss,
-    CLIP_MoE_Blending_Loss
+    CLIP_MoE_Blending_Loss,
 )
 
 import torch
@@ -237,7 +237,10 @@ class CLIP(nn.Module):
                 augmented_text_feat = F.normalize(augmented_text_embeds, dim=-1)
 
         if txt_expert_model is not None:
-            assert self.ita_type == "clip_moe", "txt_expert_model should only be used with clip_moe"
+            assert self.ita_type in [
+                "clip_moe",
+                "clip_moe_blend",
+            ], "txt_expert_model should only be used with clip_moe or clip_moe_blend"
             with torch.no_grad():
                 txt_embeds_expert = txt_expert_model.module.encode(
                     raw_text, convert_to_tensor=True, normalize_embeddings=True
