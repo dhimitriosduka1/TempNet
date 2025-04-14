@@ -823,6 +823,7 @@ def main(args):
         swav_weight=args.swav_weight,
         total_steps=args.epochs * train_loader.batches_per_epoch,
         sim_based_loss_alpha=args.sim_based_loss_alpha,
+        sim_blend_ratio=args.sim_blend_ratio,
     )
 
     model = model.to(device)
@@ -1625,6 +1626,7 @@ if __name__ == "__main__":
             "sim_based_clip",
             "scheduled_clip_loss",
             "clip_moe",
+            "clip_moe_blend"
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -1723,6 +1725,8 @@ if __name__ == "__main__":
     # Experts
     parser.add_argument("--enable_txt_expert", action="store_true")
     parser.add_argument("--txt_expert_model", default="sentence-transformers/all-roberta-large-v1")
+
+    parser.add_argument("--sim_blend_ratio", default=0.0, type=float)
 
     args = parser.parse_args()
 

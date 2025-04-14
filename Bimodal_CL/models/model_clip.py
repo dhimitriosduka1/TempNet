@@ -15,6 +15,7 @@ from models.losses import (
     Sim_Based_CLIP_Loss,
     Scheduled_CLIP_Loss,
     CLIP_MoE_Loss,
+    CLIP_MoE_Blending_Loss
 )
 
 import torch
@@ -48,6 +49,7 @@ class CLIP(nn.Module):
         swav_temp=0.1,
         swav_weight=1.0,
         sim_based_loss_alpha=0.1,
+        sim_blend_ratio=None,
         total_steps=None,
     ):
         super().__init__()
@@ -163,6 +165,14 @@ class CLIP(nn.Module):
                 world_size=world_size,
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
+            )
+        elif self.ita_type == "clip_moe_blend":
+            print("Using CLIP_MoE with blending")
+            self.criterion = CLIP_MoE_Blending_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+                sim_blend_ratio=sim_blend_ratio,
             )
         else:
             raise NotImplementedError
@@ -322,6 +332,14 @@ class CLIP(nn.Module):
                 current_step=current_step,
             )
         elif self.ita_type == "clip_moe":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                text_expert_features=txt_embeds_expert,
+                image_expert_features=None,
+                args=args,
+            )
+        elif self.ita_type == "clip_moe_blend":
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,
