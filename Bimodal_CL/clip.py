@@ -827,14 +827,6 @@ def main(args):
 
     model = model.to(device)
 
-    text_expert_model = None
-    if args.enable_txt_expert:
-        print(f"Loading text expert model {args.txt_expert_model}...")
-        text_expert_model = SentenceTransformer(args.txt_expert_model)
-        text_expert_model = text_expert_model.to(device)
-        text_expert_model.eval()
-        print("Text expert model loaded.")
-
     # use kmeans to find several clusters from the dataset
     if args.find_clusters:
         model.eval()
@@ -1259,6 +1251,21 @@ def main(args):
         find_unused_parameters=args.text_encoder == "roberta-large",
     )
     model_without_ddp = model.module
+
+    text_expert_model = None
+    if args.enable_txt_expert:
+        print(f"Loading text expert model {args.txt_expert_model}...")
+        text_expert_model = SentenceTransformer(args.txt_expert_model)
+        text_expert_model = text_expert_model.to(device)
+
+        text_expert_model = torch.nn.parallel.DistributedDataParallel(
+            text_expert_model,
+            device_ids=[args.gpu],
+            find_unused_parameters=True,
+        )
+        
+        text_expert_model.eval()
+        print("Text expert model loaded and set to eval mode.")
 
     if args.use_amp:
         grad_scaler = torch.cuda.amp.GradScaler()
