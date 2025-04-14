@@ -29,15 +29,15 @@ LR=8e-4
 ITA_TYPE=clip_moe
 
 SIM_BASED_LOSS_ALPHA=0.04
-T2T_LOSS_WEIGHT=0.4
+T2T_LOSS_WEIGHT=0.6
 
-DESC=CLIP_MoE_TXT_${SIM_BASED_LOSS_ALPHA}_LOSS_WEITGHT_${T2T_LOSS_WEIGHT}
+DESC=R_CLIP_MoE_TXT_${SIM_BASED_LOSS_ALPHA}_LOSS_WEITGHT_${T2T_LOSS_WEIGHT}
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.4 \
+    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.6 \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
