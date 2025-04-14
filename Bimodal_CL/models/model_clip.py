@@ -227,8 +227,8 @@ class CLIP(nn.Module):
                 augmented_text_feat = F.normalize(augmented_text_embeds, dim=-1)
 
         if txt_expert_model is not None:
-            # assert self.ita_type == "clip_moe", "txt_expert_model should only be used with clip_moe"
-            txt_embeds_expert = txt_expert_model.encode(
+            assert self.ita_type == "clip_moe", "txt_expert_model should only be used with clip_moe"
+            txt_embeds_expert = txt_expert_model.module.encode(
                 raw_text, convert_to_tensor=True, normalize_embeddings=True
             )
 
