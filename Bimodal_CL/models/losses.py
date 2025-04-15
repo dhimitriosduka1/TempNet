@@ -453,14 +453,14 @@ class Scheduled_CLIP_Loss(nn.Module):
         max_per_sample_temperature = per_sample_temperature.max().item()
         avg_per_sample_temperature = per_sample_temperature.mean().item()
         median_per_sample_temperature = per_sample_temperature.median().item()
-        quantile_0_5_per_sample_temperature = per_sample_temperature.quantile(0.5).item()
+        quantile_0_5_per_sample_temperature = per_sample_temperature.float().quantile(0.5).item()
 
         temp_of_positives = per_sample_temperature.diag()
         positive_samples_min_temperature = temp_of_positives.min().item()
         positive_samples_max_temperature = temp_of_positives.max().item()
         positive_samples_avg_temperature = temp_of_positives.mean().item()
         positive_samples_median_temperature = temp_of_positives.median().item()
-        positive_samples_quantile_0_5_temperature = temp_of_positives.quantile(0.5).item()
+        positive_samples_quantile_0_5_temperature = temp_of_positives.float().quantile(0.5).item()
         
         temp_of_negatives = per_sample_temperature[~torch.eye(per_sample_temperature.size(0), dtype=bool)]
         negative_samples_min_temperature = temp_of_negatives.min().item()
