@@ -448,6 +448,27 @@ class Scheduled_CLIP_Loss(nn.Module):
         # Combine the two losses using a weighted sum
         total_loss = clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
 
+        # Additional temperature metrics
+        min_per_sample_temperature = per_sample_temperature.min().item()
+        max_per_sample_temperature = per_sample_temperature.max().item()
+        avg_per_sample_temperature = per_sample_temperature.mean().item()
+        median_per_sample_temperature = per_sample_temperature.median().item()
+        quantile_0_5_per_sample_temperature = per_sample_temperature.quantile(0.5).item()
+
+        temp_of_positives = per_sample_temperature.diag()
+        positive_samples_min_temperature = temp_of_positives.min().item()
+        positive_samples_max_temperature = temp_of_positives.max().item()
+        positive_samples_avg_temperature = temp_of_positives.mean().item()
+        positive_samples_median_temperature = temp_of_positives.median().item()
+        positive_samples_quantile_0_5_temperature = temp_of_positives.quantile(0.5).item()
+        
+        temp_of_negatives = per_sample_temperature[~torch.eye(per_sample_temperature.size(0), dtype=bool)]
+        negative_samples_min_temperature = temp_of_negatives.min().item()
+        negative_samples_max_temperature = temp_of_negatives.max().item()
+        negative_samples_avg_temperature = temp_of_negatives.mean().item()
+        negative_samples_median_temperature = temp_of_negatives.median().item()
+        negative_samples_quantile_0_5_temperature = temp_of_negatives.quantile(0.5).item()
+
         log_obj = {
             "train/temperature": self.temperature,
             "train/t2i_loss": clip_t2i_loss.item(),
@@ -456,8 +477,21 @@ class Scheduled_CLIP_Loss(nn.Module):
             "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
             "train/clip_loss_weight": clip_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
-            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
-            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
+            "train/min_per_sample_temperature": min_per_sample_temperature,
+            "train/max_per_sample_temperature": max_per_sample_temperature,
+            "train/avg_per_sample_temperature": avg_per_sample_temperature,
+            "train/median_per_sample_temperature": median_per_sample_temperature,
+            "train/quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
+            "train/positive_samples_min_temperature": positive_samples_min_temperature,
+            "train/positive_samples_max_temperature": positive_samples_max_temperature,
+            "train/positive_samples_avg_temperature": positive_samples_avg_temperature,
+            "train/positive_samples_median_temperature": positive_samples_median_temperature,
+            "train/positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
+            "train/negative_samples_min_temperature": negative_samples_min_temperature,
+            "train/negative_samples_max_temperature": negative_samples_max_temperature,
+            "train/negative_samples_avg_temperature": negative_samples_avg_temperature,
+            "train/negative_samples_median_temperature": negative_samples_median_temperature,
+            "train/negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
         }
 
         if utils.is_main_process():
