@@ -302,6 +302,9 @@ class CLIP_MoE_Loss(nn.Module):
             "train/clip_loss": clip_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/positive_samples_avg_temperature": per_sample_temperature.mean().item(),
+            "train/positive_samples_median_temperature": per_sample_temperature.median().item(),
+            "train/positive_samples_quantile_0.5_temperature": per_sample_temperature.float().quantile(0.5).item(),
         }
 
         if utils.is_main_process():
