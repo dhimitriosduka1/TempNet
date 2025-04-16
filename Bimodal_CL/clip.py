@@ -1626,7 +1626,8 @@ if __name__ == "__main__":
             "sim_based_clip",
             "scheduled_clip_loss",
             "clip_moe",
-            "clip_moe_blend"
+            "clip_moe_blend",
+            "clip_meo_text_supervision",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)

@@ -304,7 +304,9 @@ class CLIP_MoE_Loss(nn.Module):
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
             "train/positive_samples_avg_temperature": per_sample_temperature.mean().item(),
             "train/positive_samples_median_temperature": per_sample_temperature.median().item(),
-            "train/positive_samples_quantile_0.5_temperature": per_sample_temperature.float().quantile(0.5).item(),
+            "train/positive_samples_quantile_0.5_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
         }
 
         if utils.is_main_process():
@@ -385,6 +387,74 @@ class CLIP_MoE_Blending_Loss(nn.Module):
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
             "train/sim_blend_ratio": self.sim_blend_ratio,
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
+class CLIP_MoE_Text_Supervision(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.05,
+        sim_blend_ratio=0.2,
+    ):
+        super(CLIP_MoE_Text_Supervision, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+
+        self.sim_blend_ratio = sim_blend_ratio
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        text_expert_features,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+            text_expert_features = torch.cat(
+                GatherLayer.apply(text_expert_features), dim=0
+            )
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_similarity = text_features @ image_features.T
+
+        t2t_expert_sim = text_expert_features @ text_expert_features.T
+        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+            (t2t_expert_sim + 1.0) / 2.0
+        )
+        t2i_loss = F.cross_entropy(clip_similarity / per_sample_temperature, labels)
+
+        i2t_loss = F.cross_entropy((clip_similarity / self.temperature).t(), labels)
+
+        total_loss = (i2t_loss + t2i_loss) / 2
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/i2t_loss": i2t_loss.item(),
+            "train/t2i_loss": t2i_loss.item(),
+            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
+            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/sim_blend_ratio": self.sim_blend_ratio,
+            "train/avg_per_sample_temperature": per_sample_temperature.mean().item(),
+            "train/median_per_sample_temperature": per_sample_temperature.median().item(),
+            "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
         }
 
         if utils.is_main_process():
