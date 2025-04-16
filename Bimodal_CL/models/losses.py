@@ -243,6 +243,7 @@ class Sim_Based_CLIP_Loss(nn.Module):
 
         return total_loss
 
+
 class CLIP_MoE_Loss(nn.Module):
     def __init__(
         self,
@@ -282,7 +283,7 @@ class CLIP_MoE_Loss(nn.Module):
         clip_loss = (i2t_loss + t2i_loss) / 2
 
         # Expert based t2t loss
-        t2t_expert_sim = (text_expert_features @ text_expert_features.T)
+        t2t_expert_sim = text_expert_features @ text_expert_features.T
         per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
             (t2t_expert_sim + 1.0) / 2.0
         )
@@ -301,6 +302,11 @@ class CLIP_MoE_Loss(nn.Module):
             "train/clip_loss": clip_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/positive_samples_avg_temperature": per_sample_temperature.mean().item(),
+            "train/positive_samples_median_temperature": per_sample_temperature.median().item(),
+            "train/positive_samples_quantile_0.5_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
         }
 
         if utils.is_main_process():
@@ -309,7 +315,8 @@ class CLIP_MoE_Loss(nn.Module):
                 step=wandb.run.step,
             )
 
-        return total_loss 
+        return total_loss
+
 
 class CLIP_MoE_Blending_Loss(nn.Module):
     def __init__(
@@ -353,11 +360,13 @@ class CLIP_MoE_Blending_Loss(nn.Module):
         clip_loss = (i2t_loss + t2i_loss) / 2
 
         # Expert based t2t loss
-        t2t_expert_sim = (text_expert_features @ text_expert_features.T)
-        t2t_sim = (text_features @ text_features.T)
+        t2t_expert_sim = text_expert_features @ text_expert_features.T
+        t2t_sim = text_features @ text_features.T
 
         # Mix the two similarities together
-        blended_sim = (1.0 - self.sim_blend_ratio) * t2t_sim + self.sim_blend_ratio * t2t_expert_sim
+        blended_sim = (
+            1.0 - self.sim_blend_ratio
+        ) * t2t_sim + self.sim_blend_ratio * t2t_expert_sim
 
         per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
             (blended_sim + 1.0) / 2.0
@@ -386,23 +395,88 @@ class CLIP_MoE_Blending_Loss(nn.Module):
                 step=wandb.run.step,
             )
 
-        return total_loss 
+        return total_loss
 
-class Scheduled_CLIP_Loss(nn.Module):
+
+class CLIP_MoE_Text_Supervision(nn.Module):
     def __init__(
         self,
         world_size=8,
         temperature=0.01,
-        alpha=0.1,
-        total_steps=None
+        alpha=0.05,
+        sim_blend_ratio=0.2,
     ):
+        super(CLIP_MoE_Text_Supervision, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+
+        self.sim_blend_ratio = sim_blend_ratio
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        text_expert_features,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+            text_expert_features = torch.cat(
+                GatherLayer.apply(text_expert_features), dim=0
+            )
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_similarity = text_features @ image_features.T
+
+        t2t_expert_sim = text_expert_features @ text_expert_features.T
+        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+            (t2t_expert_sim + 1.0) / 2.0
+        )
+        t2i_loss = F.cross_entropy(clip_similarity / per_sample_temperature, labels)
+
+        i2t_loss = F.cross_entropy((clip_similarity / self.temperature).t(), labels)
+
+        total_loss = (i2t_loss + t2i_loss) / 2
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/i2t_loss": i2t_loss.item(),
+            "train/t2i_loss": t2i_loss.item(),
+            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
+            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/sim_blend_ratio": self.sim_blend_ratio,
+            "train/avg_per_sample_temperature": per_sample_temperature.mean().item(),
+            "train/median_per_sample_temperature": per_sample_temperature.median().item(),
+            "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
+class Scheduled_CLIP_Loss(nn.Module):
+    def __init__(self, world_size=8, temperature=0.01, alpha=0.1, total_steps=None):
         super(Scheduled_CLIP_Loss, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
         self.alpha = alpha
         self.total_steps = total_steps
 
-        assert total_steps is not None, "total_steps must be provided for scheduled loss"
+        assert (
+            total_steps is not None
+        ), "total_steps must be provided for scheduled loss"
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -443,10 +517,41 @@ class Scheduled_CLIP_Loss(nn.Module):
 
         normalized_current_step = current_step / self.total_steps
         clip_loss_weight = (normalized_current_step - 1.0) ** 2
-        sim_loss_weight = normalized_current_step ** 2
+        sim_loss_weight = normalized_current_step**2
 
         # Combine the two losses using a weighted sum
-        total_loss = clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
+        total_loss = (
+            clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
+        )
+
+        # Additional temperature metrics
+        min_per_sample_temperature = per_sample_temperature.min().item()
+        max_per_sample_temperature = per_sample_temperature.max().item()
+        avg_per_sample_temperature = per_sample_temperature.mean().item()
+        median_per_sample_temperature = per_sample_temperature.median().item()
+        quantile_0_5_per_sample_temperature = (
+            per_sample_temperature.float().quantile(0.5).item()
+        )
+
+        temp_of_positives = per_sample_temperature.diag()
+        positive_samples_min_temperature = temp_of_positives.min().item()
+        positive_samples_max_temperature = temp_of_positives.max().item()
+        positive_samples_avg_temperature = temp_of_positives.mean().item()
+        positive_samples_median_temperature = temp_of_positives.median().item()
+        positive_samples_quantile_0_5_temperature = (
+            temp_of_positives.float().quantile(0.5).item()
+        )
+
+        temp_of_negatives = per_sample_temperature[
+            ~torch.eye(per_sample_temperature.size(0), dtype=bool)
+        ]
+        negative_samples_min_temperature = temp_of_negatives.min().item()
+        negative_samples_max_temperature = temp_of_negatives.max().item()
+        negative_samples_avg_temperature = temp_of_negatives.mean().item()
+        negative_samples_median_temperature = temp_of_negatives.median().item()
+        negative_samples_quantile_0_5_temperature = (
+            temp_of_negatives.float().quantile(0.5).item()
+        )
 
         log_obj = {
             "train/temperature": self.temperature,
@@ -456,8 +561,21 @@ class Scheduled_CLIP_Loss(nn.Module):
             "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
             "train/clip_loss_weight": clip_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
-            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
-            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
+            "train/min_per_sample_temperature": min_per_sample_temperature,
+            "train/max_per_sample_temperature": max_per_sample_temperature,
+            "train/avg_per_sample_temperature": avg_per_sample_temperature,
+            "train/median_per_sample_temperature": median_per_sample_temperature,
+            "train/quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
+            "train/positive_samples_min_temperature": positive_samples_min_temperature,
+            "train/positive_samples_max_temperature": positive_samples_max_temperature,
+            "train/positive_samples_avg_temperature": positive_samples_avg_temperature,
+            "train/positive_samples_median_temperature": positive_samples_median_temperature,
+            "train/positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
+            "train/negative_samples_min_temperature": negative_samples_min_temperature,
+            "train/negative_samples_max_temperature": negative_samples_max_temperature,
+            "train/negative_samples_avg_temperature": negative_samples_avg_temperature,
+            "train/negative_samples_median_temperature": negative_samples_median_temperature,
+            "train/negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
         }
 
         if utils.is_main_process():
@@ -467,6 +585,7 @@ class Scheduled_CLIP_Loss(nn.Module):
             )
 
         return total_loss
+
 
 class CLIP_Loss_PCT(nn.Module):
     def __init__(self, world_size=8, temperature=0.01):
