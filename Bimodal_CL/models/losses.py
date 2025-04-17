@@ -467,16 +467,28 @@ class CLIP_MoE_Text_Supervision(nn.Module):
 
 
 class Scheduled_CLIP_Loss(nn.Module):
-    def __init__(self, world_size=8, temperature=0.01, alpha=0.1, total_steps=None):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+        total_steps=None,
+        clip_scheduled_loss_type="none",
+    ):
         super(Scheduled_CLIP_Loss, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
         self.alpha = alpha
         self.total_steps = total_steps
+        self.clip_scheduled_loss_type = clip_scheduled_loss_type
 
         assert (
             total_steps is not None
         ), "total_steps must be provided for scheduled loss"
+
+        assert (
+            self.clip_scheduled_loss_type != "none"
+        ), "clip_scheduled_loss_type must be provided for scheduled loss"
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -516,8 +528,17 @@ class Scheduled_CLIP_Loss(nn.Module):
         sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
 
         normalized_current_step = current_step / self.total_steps
-        clip_loss_weight = (normalized_current_step - 1.0) ** 2
-        sim_loss_weight = normalized_current_step**2
+
+        if self.clip_scheduled_loss_type == "quadratic":
+            clip_loss_weight = (normalized_current_step - 1.0) ** 2
+            sim_loss_weight = normalized_current_step**2
+        elif self.clip_scheduled_loss_type == "linear":
+            clip_loss_weight = 1.0 - normalized_current_step
+            sim_loss_weight = normalized_current_step
+        else:
+            raise ValueError(
+                f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
+            )
 
         # Combine the two losses using a weighted sum
         total_loss = (

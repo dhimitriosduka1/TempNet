@@ -52,6 +52,7 @@ class CLIP(nn.Module):
         sim_based_loss_alpha=0.1,
         sim_blend_ratio=None,
         total_steps=None,
+        clip_scheduled_loss_type=None,
     ):
         super().__init__()
 
@@ -159,6 +160,7 @@ class CLIP(nn.Module):
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
+                clip_scheduled_loss_type=clip_scheduled_loss_type,
             )
         elif self.ita_type == "clip_moe":
             print(f"Using CLIP_MoE")

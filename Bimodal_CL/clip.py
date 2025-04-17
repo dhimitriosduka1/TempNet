@@ -824,6 +824,7 @@ def main(args):
         total_steps=args.epochs * train_loader.batches_per_epoch,
         sim_based_loss_alpha=args.sim_based_loss_alpha,
         sim_blend_ratio=args.sim_blend_ratio,
+        clip_scheduled_loss_type=args.clip_scheduled_loss_type,
     )
 
     model = model.to(device)
@@ -1722,6 +1723,9 @@ if __name__ == "__main__":
 
     # SimBasedCLIP loss params
     parser.add_argument("--sim_based_loss_alpha", default=0.1, type=float)
+
+    # For Scheduled_CLIP_Loss
+    parser.add_argument("--clip_scheduled_loss_type", default="none", choices=["none", "linear", "quadratic"])
 
     # Experts
     parser.add_argument("--enable_txt_expert", action="store_true")
