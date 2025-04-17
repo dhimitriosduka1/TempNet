@@ -31,7 +31,7 @@ ITA_TYPE=scheduled_clip_loss
 BASE_TAU=0.01
 ALPHA=0.02
 
-DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD
+DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_LINEAR
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
