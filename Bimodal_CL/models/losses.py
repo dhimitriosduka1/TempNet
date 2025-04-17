@@ -378,6 +378,11 @@ class CLIP_MoE_Blending_Loss(nn.Module):
 
         total_loss = clip_loss + args.t2t_loss_weight * t2t_loss
 
+        temp_of_positives = per_sample_temperature.diag()
+        temp_of_negatives = per_sample_temperature[
+            ~torch.eye(per_sample_temperature.size(0), dtype=bool)
+        ]
+
         log_obj = {
             "train/temperature": self.temperature,
             "train/i2t_loss": i2t_loss.item(),
@@ -386,6 +391,24 @@ class CLIP_MoE_Blending_Loss(nn.Module):
             "train/clip_loss": clip_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/median_per_sample_temperature": per_sample_temperature.median().item(),
+            "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
+            "train/positive_samples_min_temperature": temp_of_positives.min().item(),
+            "train/positive_samples_max_temperature": temp_of_positives.max().item(),
+            "train/positive_samples_avg_temperature": temp_of_positives.mean().item(),
+            "train/positive_samples_median_temperature": temp_of_positives.median().item(),
+            "train/positive_samples_quantile_0.5_temperature": temp_of_positives.float()
+            .quantile(0.5)
+            .item(),
+            "train/negative_samples_min_temperature": temp_of_negatives.min().item(),
+            "train/negative_samples_max_temperature": temp_of_negatives.max().item(),
+            "train/negative_samples_avg_temperature": temp_of_negatives.mean().item(),
+            "train/negative_samples_median_temperature": temp_of_negatives.median().item(),
+            "train/negative_samples_quantile_0.5_temperature": temp_of_negatives.float()
+            .quantile(0.5)
+            .item(),
             "train/sim_blend_ratio": self.sim_blend_ratio,
         }
 
@@ -399,12 +422,7 @@ class CLIP_MoE_Blending_Loss(nn.Module):
 
 
 class CLIP_MoE_Text_Supervision(nn.Module):
-    def __init__(
-        self,
-        world_size=8,
-        temperature=0.01,
-        alpha=0.05
-    ):
+    def __init__(self, world_size=8, temperature=0.01, alpha=0.05):
         super(CLIP_MoE_Text_Supervision, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
