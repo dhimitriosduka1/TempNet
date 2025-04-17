@@ -403,15 +403,12 @@ class CLIP_MoE_Text_Supervision(nn.Module):
         self,
         world_size=8,
         temperature=0.01,
-        alpha=0.05,
-        sim_blend_ratio=0.2,
+        alpha=0.05
     ):
         super(CLIP_MoE_Text_Supervision, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
         self.alpha = alpha
-
-        self.sim_blend_ratio = sim_blend_ratio
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -449,7 +446,6 @@ class CLIP_MoE_Text_Supervision(nn.Module):
             "train/t2i_loss": t2i_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
-            "train/sim_blend_ratio": self.sim_blend_ratio,
             "train/avg_per_sample_temperature": per_sample_temperature.mean().item(),
             "train/median_per_sample_temperature": per_sample_temperature.median().item(),
             "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
