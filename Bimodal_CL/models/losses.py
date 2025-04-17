@@ -13,6 +13,55 @@ import wandb
 import utils
 
 
+# Function responsible for extracting different statistics from the custom per sample temperature tensor
+def get_temperature_statistics(per_sample_temperature):
+    min_per_sample_temperature = per_sample_temperature.min().item()
+    max_per_sample_temperature = per_sample_temperature.max().item()
+    avg_per_sample_temperature = per_sample_temperature.mean().item()
+    median_per_sample_temperature = per_sample_temperature.median().item()
+    quantile_0_5_per_sample_temperature = (
+        per_sample_temperature.float().quantile(0.5).item()
+    )
+
+    temp_of_positives = per_sample_temperature.diag()
+    positive_samples_min_temperature = temp_of_positives.min().item()
+    positive_samples_max_temperature = temp_of_positives.max().item()
+    positive_samples_avg_temperature = temp_of_positives.mean().item()
+    positive_samples_median_temperature = temp_of_positives.median().item()
+    positive_samples_quantile_0_5_temperature = (
+        temp_of_positives.float().quantile(0.5).item()
+    )
+
+    temp_of_negatives = per_sample_temperature[
+        ~torch.eye(per_sample_temperature.size(0), dtype=bool)
+    ]
+    negative_samples_min_temperature = temp_of_negatives.min().item()
+    negative_samples_max_temperature = temp_of_negatives.max().item()
+    negative_samples_avg_temperature = temp_of_negatives.mean().item()
+    negative_samples_median_temperature = temp_of_negatives.median().item()
+    negative_samples_quantile_0_5_temperature = (
+        temp_of_negatives.float().quantile(0.5).item()
+    )
+
+    return {
+        "train/min_per_sample_temperature": min_per_sample_temperature,
+        "train/max_per_sample_temperature": max_per_sample_temperature,
+        "train/avg_per_sample_temperature": avg_per_sample_temperature,
+        "train/median_per_sample_temperature": median_per_sample_temperature,
+        "train/quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
+        "train/positive_samples_min_temperature": positive_samples_min_temperature,
+        "train/positive_samples_max_temperature": positive_samples_max_temperature,
+        "train/positive_samples_avg_temperature": positive_samples_avg_temperature,
+        "train/positive_samples_median_temperature": positive_samples_median_temperature,
+        "train/positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
+        "train/negative_samples_min_temperature": negative_samples_min_temperature,
+        "train/negative_samples_max_temperature": negative_samples_max_temperature,
+        "train/negative_samples_avg_temperature": negative_samples_avg_temperature,
+        "train/negative_samples_median_temperature": negative_samples_median_temperature,
+        "train/negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
+    }
+
+
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
     """Gather tensors from all process, supporting backward propagation."""
@@ -300,14 +349,9 @@ class CLIP_MoE_Loss(nn.Module):
             "train/t2i_loss": t2i_loss.item(),
             "train/t2t_loss": t2t_loss.item(),
             "train/clip_loss": clip_loss.item(),
-            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
-            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
-            "train/positive_samples_avg_temperature": per_sample_temperature.mean().item(),
-            "train/positive_samples_median_temperature": per_sample_temperature.median().item(),
-            "train/positive_samples_quantile_0.5_temperature": per_sample_temperature.float()
-            .quantile(0.5)
-            .item(),
         }
+
+        log_obj.update(get_temperature_statistics(per_sample_temperature))
 
         if utils.is_main_process():
             wandb.log(
@@ -378,6 +422,11 @@ class CLIP_MoE_Blending_Loss(nn.Module):
 
         total_loss = clip_loss + args.t2t_loss_weight * t2t_loss
 
+        temp_of_positives = per_sample_temperature.diag()
+        temp_of_negatives = per_sample_temperature[
+            ~torch.eye(per_sample_temperature.size(0), dtype=bool)
+        ]
+
         log_obj = {
             "train/temperature": self.temperature,
             "train/i2t_loss": i2t_loss.item(),
@@ -386,6 +435,24 @@ class CLIP_MoE_Blending_Loss(nn.Module):
             "train/clip_loss": clip_loss.item(),
             "train/max_per_sample_temperature": per_sample_temperature.max().item(),
             "train/min_per_sample_temperature": per_sample_temperature.min().item(),
+            "train/median_per_sample_temperature": per_sample_temperature.median().item(),
+            "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
+            .quantile(0.5)
+            .item(),
+            "train/positive_samples_min_temperature": temp_of_positives.min().item(),
+            "train/positive_samples_max_temperature": temp_of_positives.max().item(),
+            "train/positive_samples_avg_temperature": temp_of_positives.mean().item(),
+            "train/positive_samples_median_temperature": temp_of_positives.median().item(),
+            "train/positive_samples_quantile_0.5_temperature": temp_of_positives.float()
+            .quantile(0.5)
+            .item(),
+            "train/negative_samples_min_temperature": temp_of_negatives.min().item(),
+            "train/negative_samples_max_temperature": temp_of_negatives.max().item(),
+            "train/negative_samples_avg_temperature": temp_of_negatives.mean().item(),
+            "train/negative_samples_median_temperature": temp_of_negatives.median().item(),
+            "train/negative_samples_quantile_0.5_temperature": temp_of_negatives.float()
+            .quantile(0.5)
+            .item(),
             "train/sim_blend_ratio": self.sim_blend_ratio,
         }
 
@@ -399,19 +466,11 @@ class CLIP_MoE_Blending_Loss(nn.Module):
 
 
 class CLIP_MoE_Text_Supervision(nn.Module):
-    def __init__(
-        self,
-        world_size=8,
-        temperature=0.01,
-        alpha=0.05,
-        sim_blend_ratio=0.2,
-    ):
+    def __init__(self, world_size=8, temperature=0.01, alpha=0.05):
         super(CLIP_MoE_Text_Supervision, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
         self.alpha = alpha
-
-        self.sim_blend_ratio = sim_blend_ratio
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -447,15 +506,9 @@ class CLIP_MoE_Text_Supervision(nn.Module):
             "train/temperature": self.temperature,
             "train/i2t_loss": i2t_loss.item(),
             "train/t2i_loss": t2i_loss.item(),
-            "train/max_per_sample_temperature": per_sample_temperature.max().item(),
-            "train/min_per_sample_temperature": per_sample_temperature.min().item(),
-            "train/sim_blend_ratio": self.sim_blend_ratio,
-            "train/avg_per_sample_temperature": per_sample_temperature.mean().item(),
-            "train/median_per_sample_temperature": per_sample_temperature.median().item(),
-            "train/quantile_0.5_per_sample_temperature": per_sample_temperature.float()
-            .quantile(0.5)
-            .item(),
         }
+
+        log_obj.update(get_temperature_statistics(per_sample_temperature))
 
         if utils.is_main_process():
             wandb.log(
@@ -467,16 +520,28 @@ class CLIP_MoE_Text_Supervision(nn.Module):
 
 
 class Scheduled_CLIP_Loss(nn.Module):
-    def __init__(self, world_size=8, temperature=0.01, alpha=0.1, total_steps=None):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+        total_steps=None,
+        clip_scheduled_loss_type="none",
+    ):
         super(Scheduled_CLIP_Loss, self).__init__()
         self.world_size = world_size
         self.temperature = temperature
         self.alpha = alpha
         self.total_steps = total_steps
+        self.clip_scheduled_loss_type = clip_scheduled_loss_type
 
         assert (
             total_steps is not None
         ), "total_steps must be provided for scheduled loss"
+
+        assert (
+            self.clip_scheduled_loss_type != "none"
+        ), "clip_scheduled_loss_type must be provided for scheduled loss"
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -516,41 +581,21 @@ class Scheduled_CLIP_Loss(nn.Module):
         sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
 
         normalized_current_step = current_step / self.total_steps
-        clip_loss_weight = (normalized_current_step - 1.0) ** 2
-        sim_loss_weight = normalized_current_step**2
+
+        if self.clip_scheduled_loss_type == "quadratic":
+            clip_loss_weight = (normalized_current_step - 1.0) ** 2
+            sim_loss_weight = normalized_current_step**2
+        elif self.clip_scheduled_loss_type == "linear":
+            clip_loss_weight = 1.0 - normalized_current_step
+            sim_loss_weight = normalized_current_step
+        else:
+            raise ValueError(
+                f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
+            )
 
         # Combine the two losses using a weighted sum
         total_loss = (
             clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
-        )
-
-        # Additional temperature metrics
-        min_per_sample_temperature = per_sample_temperature.min().item()
-        max_per_sample_temperature = per_sample_temperature.max().item()
-        avg_per_sample_temperature = per_sample_temperature.mean().item()
-        median_per_sample_temperature = per_sample_temperature.median().item()
-        quantile_0_5_per_sample_temperature = (
-            per_sample_temperature.float().quantile(0.5).item()
-        )
-
-        temp_of_positives = per_sample_temperature.diag()
-        positive_samples_min_temperature = temp_of_positives.min().item()
-        positive_samples_max_temperature = temp_of_positives.max().item()
-        positive_samples_avg_temperature = temp_of_positives.mean().item()
-        positive_samples_median_temperature = temp_of_positives.median().item()
-        positive_samples_quantile_0_5_temperature = (
-            temp_of_positives.float().quantile(0.5).item()
-        )
-
-        temp_of_negatives = per_sample_temperature[
-            ~torch.eye(per_sample_temperature.size(0), dtype=bool)
-        ]
-        negative_samples_min_temperature = temp_of_negatives.min().item()
-        negative_samples_max_temperature = temp_of_negatives.max().item()
-        negative_samples_avg_temperature = temp_of_negatives.mean().item()
-        negative_samples_median_temperature = temp_of_negatives.median().item()
-        negative_samples_quantile_0_5_temperature = (
-            temp_of_negatives.float().quantile(0.5).item()
         )
 
         log_obj = {
@@ -561,22 +606,9 @@ class Scheduled_CLIP_Loss(nn.Module):
             "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
             "train/clip_loss_weight": clip_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
-            "train/min_per_sample_temperature": min_per_sample_temperature,
-            "train/max_per_sample_temperature": max_per_sample_temperature,
-            "train/avg_per_sample_temperature": avg_per_sample_temperature,
-            "train/median_per_sample_temperature": median_per_sample_temperature,
-            "train/quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
-            "train/positive_samples_min_temperature": positive_samples_min_temperature,
-            "train/positive_samples_max_temperature": positive_samples_max_temperature,
-            "train/positive_samples_avg_temperature": positive_samples_avg_temperature,
-            "train/positive_samples_median_temperature": positive_samples_median_temperature,
-            "train/positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
-            "train/negative_samples_min_temperature": negative_samples_min_temperature,
-            "train/negative_samples_max_temperature": negative_samples_max_temperature,
-            "train/negative_samples_avg_temperature": negative_samples_avg_temperature,
-            "train/negative_samples_median_temperature": negative_samples_median_temperature,
-            "train/negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
         }
+
+        log_obj.update(get_temperature_statistics(per_sample_temperature))
 
         if utils.is_main_process():
             wandb.log(
