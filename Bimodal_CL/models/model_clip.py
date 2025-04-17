@@ -274,6 +274,7 @@ class CLIP(nn.Module):
                 )
                 # We only need the class token for each image.
                 image_embeds_expert = image_embeds_expert.last_hidden_state[:, 0, :]
+                image_embeds_expert = torch.nn.functional.normalize(image_embeds_expert, dim=1, p=2)
 
         if return_feat:
             return image_feat, text_feat
@@ -368,7 +369,7 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 text_expert_features=txt_embeds_expert,
-                image_expert_features=None,
+                image_expert_features=image_embeds_expert,
                 args=args,
             )
         elif self.ita_type == "clip_moe_blend":
@@ -376,7 +377,7 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 text_expert_features=txt_embeds_expert,
-                image_expert_features=None,
+                image_expert_features=image_embeds_expert,
                 args=args,
             )
         elif self.ita_type == "clip_meo_text_supervision":
