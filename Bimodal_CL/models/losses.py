@@ -313,7 +313,6 @@ class CLIP_MoE_Text_Loss(nn.Module):
         image_features,
         text_features,
         text_expert_features,
-        image_expert_features,
         args=None,
     ):
         if self.world_size > 1:
