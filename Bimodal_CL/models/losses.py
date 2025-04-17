@@ -415,6 +415,8 @@ class CLIP_MoE_Vision_Loss(nn.Module):
             "train/t2i_loss": t2i_loss.item(),
             "train/i2i_loss": i2i_loss.item(),
             "train/clip_loss": clip_loss.item(),
+            "train/sim_based_loss_alpha": self.alpha,
+            "train/i2i_loss_weight": args.i2i_loss_weight,
         }
 
         log_obj.update(get_temperature_statistics(per_sample_temperature))
