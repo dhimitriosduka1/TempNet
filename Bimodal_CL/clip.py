@@ -71,7 +71,7 @@ cm = ConfigManager()
 from sentence_transformers import SentenceTransformer
 
 # Imports for vision expert
-from transformers import AutoImageProcessor, AutoModel
+from transformers import AutoModel
 
 def train(
     model,
@@ -88,7 +88,6 @@ def train(
     args,
     eval_objects,
     txt_expert_model,
-    vision_expert_processor,
     vision_expert_model,
 ):
     # train
@@ -150,7 +149,7 @@ def train(
         idx = batch["idx"]
         text_idx = batch["text_idx"]
 
-        if i % 500 == 0:
+        if i % 500 == 0 and i > 0:
             model.eval()
             (
                 val_result_coco,
@@ -245,7 +244,7 @@ def train(
                     current_step=global_it,
                     txt_expert_model=txt_expert_model,
                     raw_text=texts,
-                    
+                    vision_expert_model=vision_expert_model,
                 )
 
                 if utils.is_main_process():
@@ -1275,12 +1274,10 @@ def main(args):
         text_expert_model.eval()
         print("Text expert model loaded and set to eval mode.")
 
-    vision_expert_processor = None
     vision_expert_model = None
     if args.enable_vision_expert:
         print(f"Loading vision expert model {args.vision_expert_model}...")
-        vision_expert_processor = AutoImageProcessor.from_pretrained(args.enable_vision_expert)
-        vision_expert_model = AutoModel.from_pretrained(args.enable_vision_expert)
+        vision_expert_model = AutoModel.from_pretrained(args.vision_expert_model)
         vision_expert_model = vision_expert_model.to(device)
 
         vision_expert_model = torch.nn.parallel.DistributedDataParallel(
@@ -1380,7 +1377,6 @@ def main(args):
             args,
             eval_objects=eval_objects,
             txt_expert_model=text_expert_model,
-            vision_expert_processor=vision_expert_processor,
             vision_expert_model=vision_expert_model,
         )
 

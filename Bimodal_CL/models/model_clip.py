@@ -204,6 +204,7 @@ class CLIP(nn.Module):
         current_step=None,
         txt_expert_model=None,
         raw_text=None,
+        vision_expert_model=None
     ):
         if self.learnable_temp:
             with torch.no_grad():
@@ -257,6 +258,22 @@ class CLIP(nn.Module):
                 txt_embeds_expert = txt_expert_model.module.encode(
                     raw_text, convert_to_tensor=True, normalize_embeddings=True
                 )
+
+        if vision_expert_model is not None:
+            assert self.ita_type in [
+                "clip_moe",
+                "clip_moe_blend",
+                "clip_meo_vision_supervision",
+            ], "vision_expert_model should only be used with clip_moe, clip_moe_blend or clip_meo_vision_supervision"
+
+            with torch.no_grad():
+                # Based on this issue, https://github.com/huggingface/transformers/issues/27977#issuecomment-1852623838
+                # we do not need to resize the 256x256 image to another dimention for DINOv2
+                image_embeds_expert = vision_expert_model.module(
+                    image
+                )
+                # We only need the class token for each image.
+                image_embeds_expert = image_embeds_expert.last_hidden_state[:, 0, :]
 
         if return_feat:
             return image_feat, text_feat
