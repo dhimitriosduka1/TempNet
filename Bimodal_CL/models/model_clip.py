@@ -14,7 +14,8 @@ from models.losses import (
     CLIP_Loss_PCT,
     Sim_Based_CLIP_Loss,
     Scheduled_CLIP_Loss,
-    CLIP_MoE_Loss,
+    CLIP_MoE_Text_Loss,
+    CLIP_MoE_Vision_Loss,
     CLIP_MoE_Blending_Loss,
     CLIP_MoE_Text_Supervision,
 )
@@ -162,9 +163,16 @@ class CLIP(nn.Module):
                 total_steps=total_steps,
                 clip_scheduled_loss_type=clip_scheduled_loss_type,
             )
-        elif self.ita_type == "clip_moe":
-            print(f"Using CLIP_MoE")
-            self.criterion = CLIP_MoE_Loss(
+        elif self.ita_type == "clip_moe_text":
+            print(f"Using CLIP_MoE_Text_Loss")
+            self.criterion = CLIP_MoE_Text_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+            )
+        elif self.ita_type == "clip_moe_vision":
+            print(f"Using CLIP_MoE_Vision_Loss")
+            self.criterion = CLIP_MoE_Vision_Loss(
                 world_size=world_size,
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
@@ -248,23 +256,25 @@ class CLIP(nn.Module):
                 )
                 augmented_text_feat = F.normalize(augmented_text_embeds, dim=-1)
 
+        txt_embeds_expert = None
         if txt_expert_model is not None:
             assert self.ita_type in [
-                "clip_moe",
+                "clip_moe_text",
                 "clip_moe_blend",
                 "clip_meo_text_supervision",
-            ], "txt_expert_model should only be used with clip_moe, clip_moe_blend or clip_meo_text_supervision"
+            ], "txt_expert_model should only be used with clip_moe_text, clip_moe_blend or clip_meo_text_supervision"
             with torch.no_grad():
                 txt_embeds_expert = txt_expert_model.module.encode(
                     raw_text, convert_to_tensor=True, normalize_embeddings=True
                 )
-
+        
+        image_embeds_expert = None
         if vision_expert_model is not None:
             assert self.ita_type in [
-                "clip_moe",
+                "clip_moe_vision",
                 "clip_moe_blend",
                 "clip_meo_vision_supervision",
-            ], "vision_expert_model should only be used with clip_moe, clip_moe_blend or clip_meo_vision_supervision"
+            ], "vision_expert_model should only be used with clip_moe_vision, clip_moe_blend or clip_meo_vision_supervision"
 
             with torch.no_grad():
                 # Based on this issue, https://github.com/huggingface/transformers/issues/27977#issuecomment-1852623838
@@ -364,11 +374,17 @@ class CLIP(nn.Module):
                 text_features=text_feat,
                 current_step=current_step,
             )
-        elif self.ita_type == "clip_moe":
+        elif self.ita_type == "clip_moe_text":
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,
                 text_expert_features=txt_embeds_expert,
+                args=args,
+            )
+        elif self.ita_type == "clip_moe_vision":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
                 image_expert_features=image_embeds_expert,
                 args=args,
             )
