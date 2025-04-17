@@ -26,7 +26,7 @@ cd "${PROJECT_DIR}"
 
 DATA=cc3m
 LR=8e-4
-ITA_TYPE=clip_moe
+ITA_TYPE=clip_moe_text
 
 SIM_BASED_LOSS_ALPHA=0.04
 T2T_LOSS_WEIGHT=0.4

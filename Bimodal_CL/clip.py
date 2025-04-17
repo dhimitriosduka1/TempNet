@@ -70,6 +70,9 @@ cm = ConfigManager()
 # Imports for text expert
 from sentence_transformers import SentenceTransformer
 
+# Imports for vision expert
+from transformers import AutoModel
+
 def train(
     model,
     data_loader,
@@ -84,7 +87,8 @@ def train(
     grad_scaler,
     args,
     eval_objects,
-    txt_expert_model
+    txt_expert_model,
+    vision_expert_model,
 ):
     # train
     model.train()
@@ -145,7 +149,7 @@ def train(
         idx = batch["idx"]
         text_idx = batch["text_idx"]
 
-        if i % 500 == 0:
+        if i % 500 == 0 and i > 0:
             model.eval()
             (
                 val_result_coco,
@@ -240,6 +244,7 @@ def train(
                     current_step=global_it,
                     txt_expert_model=txt_expert_model,
                     raw_text=texts,
+                    vision_expert_model=vision_expert_model,
                 )
 
                 if utils.is_main_process():
@@ -1269,6 +1274,21 @@ def main(args):
         text_expert_model.eval()
         print("Text expert model loaded and set to eval mode.")
 
+    vision_expert_model = None
+    if args.enable_vision_expert:
+        print(f"Loading vision expert model {args.vision_expert_model}...")
+        vision_expert_model = AutoModel.from_pretrained(args.vision_expert_model)
+        vision_expert_model = vision_expert_model.to(device)
+
+        vision_expert_model = torch.nn.parallel.DistributedDataParallel(
+            vision_expert_model,
+            device_ids=[args.gpu],
+            find_unused_parameters=True,
+        )
+
+        vision_expert_model.eval()
+        print("Vision expert model loaded and set to eval mode.")
+
     if args.use_amp:
         grad_scaler = torch.cuda.amp.GradScaler()
     else:
@@ -1357,6 +1377,7 @@ def main(args):
             args,
             eval_objects=eval_objects,
             txt_expert_model=text_expert_model,
+            vision_expert_model=vision_expert_model,
         )
 
         # save tau for visualization
@@ -1626,7 +1647,8 @@ if __name__ == "__main__":
             "clipPCT",
             "sim_based_clip",
             "scheduled_clip_loss",
-            "clip_moe",
+            "clip_moe_text",
+            "clip_moe_vision",
             "clip_moe_blend",
             "clip_meo_text_supervision",
         ],
@@ -1732,6 +1754,9 @@ if __name__ == "__main__":
     parser.add_argument("--txt_expert_model", default="sentence-transformers/all-roberta-large-v1")
 
     parser.add_argument("--sim_blend_ratio", default=0.0, type=float)
+
+    parser.add_argument("--enable_vision_expert", action="store_true")
+    parser.add_argument("--vision_expert_model", default="facebook/dinov2-large")
 
     args = parser.parse_args()
 
