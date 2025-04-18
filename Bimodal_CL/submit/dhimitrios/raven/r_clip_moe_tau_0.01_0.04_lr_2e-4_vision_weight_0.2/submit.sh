@@ -33,7 +33,7 @@ I2I_LOSS_WEIGHT=0.2
 
 DESC=R_CLIP_MoE_VISION_${SIM_BASED_LOSS_ALPHA}_LOSS_WEIGHT_${I2I_LOSS_WEIGHT}
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4831 \
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
