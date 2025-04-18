@@ -9,7 +9,7 @@
 #SBATCH --constraint="gpu"
 
 #SBATCH --gres=gpu:4
-#SBATCH --mem=480000
+#SBATCH --mem=960000
 
 #SBATCH --time=11:59:59
 #SBATCH --array=1-6%1
