@@ -149,7 +149,7 @@ def train(
         idx = batch["idx"]
         text_idx = batch["text_idx"]
 
-        if i % 500 == 0 and i > 0:
+        if i % 500 == 0:
             model.eval()
             (
                 val_result_coco,
