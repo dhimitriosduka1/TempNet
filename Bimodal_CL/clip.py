@@ -1756,7 +1756,7 @@ if __name__ == "__main__":
     parser.add_argument("--sim_blend_ratio", default=0.0, type=float)
 
     parser.add_argument("--enable_vision_expert", action="store_true")
-    parser.add_argument("--vision_expert_model", default="facebook/dinov2-base")
+    parser.add_argument("--vision_expert_model", default="facebook/dinov2-large")
 
     args = parser.parse_args()
 
