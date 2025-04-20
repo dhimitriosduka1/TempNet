@@ -397,11 +397,17 @@ class CLIP_MoE_Vision_Loss(nn.Module):
         t2i_loss = F.cross_entropy(clip_sim, labels)
         clip_loss = (i2t_loss + t2i_loss) / 2
 
+        # Cleaning up memory
+        del clip_sim
+
         # Expert based i2i loss
         i2i_expert_sim = image_expert_features @ image_expert_features.T
         per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
             (i2i_expert_sim + 1.0) / 2.0
         )
+        
+        # Cleaning up memory
+        del i2i_expert_sim
 
         # i2i loss on CLIP space
         i2i_sim = (image_features @ image_features.T) / per_sample_temperature
