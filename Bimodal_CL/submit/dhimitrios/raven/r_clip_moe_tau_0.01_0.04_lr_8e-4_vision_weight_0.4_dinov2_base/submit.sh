@@ -45,5 +45,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --enable_vision_expert \
     --i2i_loss_weight $I2I_LOSS_WEIGHT \
     --sim_based_loss_alpha $SIM_BASED_LOSS_ALPHA \
-    --batch_size_train 256 \
     --vision_expert_model facebook/dinov2-base \
