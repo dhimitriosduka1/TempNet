@@ -360,6 +360,7 @@ class CLIP_MoE_Text_Loss(nn.Module):
 
         return total_loss
 
+
 class CLIP_MoE_Vision_Loss(nn.Module):
     def __init__(
         self,
@@ -374,6 +375,28 @@ class CLIP_MoE_Vision_Loss(nn.Module):
 
     def set_temperature(self, temperature):
         self.temperature = temperature
+
+    def _chunked_similarity_processing(self, features, batch_size, chunk_size=512):
+        """Process similarity matrices in manageable chunks to reduce memory usage"""
+        device = features.device
+        per_sample_temperature = self.temperature * torch.ones(
+            batch_size, batch_size, device=device
+        )
+
+        for i in range(0, batch_size, chunk_size):
+            end_idx = min(i + chunk_size, batch_size)
+            chunk_features = features[i:end_idx]
+
+            # Calculate similarity for this chunk against all features
+            chunk_sim = chunk_features @ features.T
+
+            # Update the corresponding part of the temperature matrix
+            chunk_temp = self.temperature + self.alpha * torch.sqrt(
+                (chunk_sim + 1.0) / 2.0
+            )
+            per_sample_temperature[i:end_idx] = chunk_temp
+
+        return per_sample_temperature
 
     def forward(
         self,
@@ -398,11 +421,10 @@ class CLIP_MoE_Vision_Loss(nn.Module):
         clip_loss = (i2t_loss + t2i_loss) / 2
 
         # Expert based i2i loss
-        i2i_expert_sim = image_expert_features @ image_expert_features.T
-        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
-            (i2i_expert_sim + 1.0) / 2.0
+        per_sample_temperature = self._chunked_similarity_processing(
+            image_expert_features, image_expert_features.shape[0]
         )
-        
+
         # i2i loss on CLIP space
         i2i_sim = (image_features @ image_features.T) / per_sample_temperature
         i2i_loss = F.cross_entropy(i2i_sim, labels)
@@ -428,6 +450,7 @@ class CLIP_MoE_Vision_Loss(nn.Module):
             )
 
         return total_loss
+
 
 class CLIP_MoE_Blending_Loss(nn.Module):
     def __init__(
