@@ -73,6 +73,7 @@ from sentence_transformers import SentenceTransformer
 # Imports for vision expert
 from transformers import AutoModel
 
+
 def train(
     model,
     data_loader,
@@ -1270,14 +1271,16 @@ def main(args):
             device_ids=[args.gpu],
             find_unused_parameters=True,
         )
-        
+
         text_expert_model.eval()
         print("Text expert model loaded and set to eval mode.")
 
     vision_expert_model = None
     if args.enable_vision_expert:
-        print(f"Loading vision expert model {args.vision_expert_model}...")
-        vision_expert_model = AutoModel.from_pretrained(args.vision_expert_model)
+        print(f"Loading vision expert model {args.vision_expert_model} in fp16...")
+        vision_expert_model = AutoModel.from_pretrained(
+            args.vision_expert_model, torch_dtype=torch.float16
+        )
         vision_expert_model = vision_expert_model.to(device)
 
         vision_expert_model = torch.nn.parallel.DistributedDataParallel(
@@ -1430,7 +1433,7 @@ def main(args):
                 save_obj,
                 os.path.join(args.output_dir, f"checkpoint_{epoch}.pth"),
             )
-        
+
         torch.save(
             save_obj,
             os.path.join(args.output_dir, "checkpoint_last.pth"),
@@ -1687,7 +1690,9 @@ if __name__ == "__main__":
 
     # zero-shot transfer
     parser.add_argument("--zs_dataset", choices=["cifar10", "cifar100", "imagenet"])
-    parser.add_argument("--zs_datafolder", default="./datasets", type=str) # I don't use this.
+    parser.add_argument(
+        "--zs_datafolder", default="./datasets", type=str
+    )  # I don't use this.
 
     # arguments for bilevel tempnet
     parser.add_argument("--proto_std", default=10.0, type=float)
@@ -1729,12 +1734,8 @@ if __name__ == "__main__":
         "--cc3m_img2cls_file",
         default=cm.get_config_for("cc3m_img2cls_file"),
     )
-    parser.add_argument(
-        "--cc3m_val_root", default=cm.get_config_for("cc3m_val_root")
-    )
-    parser.add_argument(
-        "--captions_path", default=cm.get_config_for("captions_path")
-    )
+    parser.add_argument("--cc3m_val_root", default=cm.get_config_for("cc3m_val_root"))
+    parser.add_argument("--captions_path", default=cm.get_config_for("captions_path"))
     parser.add_argument("--cc3m_extended_captions_path", default="")
 
     # Losses
@@ -1747,11 +1748,17 @@ if __name__ == "__main__":
     parser.add_argument("--sim_based_loss_alpha", default=0.1, type=float)
 
     # For Scheduled_CLIP_Loss
-    parser.add_argument("--clip_scheduled_loss_type", default="none", choices=["none", "linear", "quadratic"])
+    parser.add_argument(
+        "--clip_scheduled_loss_type",
+        default="none",
+        choices=["none", "linear", "quadratic"],
+    )
 
     # Experts
     parser.add_argument("--enable_txt_expert", action="store_true")
-    parser.add_argument("--txt_expert_model", default="sentence-transformers/all-roberta-large-v1")
+    parser.add_argument(
+        "--txt_expert_model", default="sentence-transformers/all-roberta-large-v1"
+    )
 
     parser.add_argument("--sim_blend_ratio", default=0.0, type=float)
 
