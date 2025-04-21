@@ -1277,9 +1277,9 @@ def main(args):
 
     vision_expert_model = None
     if args.enable_vision_expert:
-        print(f"Loading vision expert model {args.vision_expert_model} in fp16...")
+        print(f"Loading vision expert model {args.vision_expert_model}...")
         vision_expert_model = AutoModel.from_pretrained(
-            args.vision_expert_model, torch_dtype=torch.float16
+            args.vision_expert_model
         )
         vision_expert_model = vision_expert_model.to(device)
 
