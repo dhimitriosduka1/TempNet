@@ -5,13 +5,12 @@
 
 #SBATCH --job-name bcl
 
-#SBATCH --nodes=2
+#SBATCH --ntasks=1
 #SBATCH --constraint="apu"
 
 #SBATCH --gres=gpu:2
-#SBATCH --ntasks-per-node=2
-#SBATCH --cpus-per-task=24
-#SBATCH --mem=24000
+#SBATCH --cpus-per-task=48
+#SBATCH --mem=240000
 
 #SBATCH --time=11:59:59
 #SBATCH --array=1-6%1
@@ -48,3 +47,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --i2i_loss_weight $I2I_LOSS_WEIGHT \
     --sim_based_loss_alpha $SIM_BASED_LOSS_ALPHA \
     --vision_expert_model facebook/dinov2-large \
+    --batch_size_train 1024 \
