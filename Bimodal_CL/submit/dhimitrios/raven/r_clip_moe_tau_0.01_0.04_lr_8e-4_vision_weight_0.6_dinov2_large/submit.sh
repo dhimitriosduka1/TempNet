@@ -8,10 +8,6 @@
 #SBATCH --ntasks=1
 #SBATCH --constraint="apu"
 
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=24
-#SBATCH --mem=120000
-
 #SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=48
 #SBATCH --mem=240000
