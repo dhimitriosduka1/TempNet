@@ -25,7 +25,6 @@ export mpcdf=1
 PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-
 DATA=cc3m
 LR=8e-4
 ITA_TYPE=clip_moe_vision
