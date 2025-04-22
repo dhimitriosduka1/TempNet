@@ -9,8 +9,7 @@
 #SBATCH --constraint="apu"
 
 #SBATCH --gres=gpu:2
-#SBATCH --cpus-per-task=48
-#SBATCH --mem=240000
+#SBATCH --mem=480000
 
 #SBATCH --time=11:59:59
 #SBATCH --array=1-6%1
