@@ -3,7 +3,7 @@
 #SBATCH --job-name cc3m
 #SBATCH --partition gpu22
 
-#SBATCH --time=05:59:00
+#SBATCH --time=04:59:00
 #SBATCH -a 1-8%1
 
 #SBATCH --nodes=1
@@ -18,7 +18,7 @@ PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
 DATA=cc3m
-LR=8e-4
+LR=2e-4
 ITA_TYPE=clip_moe_vision
 
 SIM_BASED_LOSS_ALPHA=0.04
@@ -30,7 +30,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_moe_tau_0.01_0.04_lr_8e-4_vision_weight_0.6_dinov2_large \
+    --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_moe_tau_0.01_0.04_lr_2e-4_vision_weight_0.6_dinov2_large \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
