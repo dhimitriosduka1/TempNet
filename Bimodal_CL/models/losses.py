@@ -618,14 +618,28 @@ class Scheduled_CLIP_Loss(nn.Module):
         image_features,
         text_features,
         current_step,
+        per_sample_temp_similarity="t2i",
+        per_sample_temp_mapping="adaptive_with_base",
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
 
-        sim = text_features @ image_features.T
+        if per_sample_temp_similarity == "t2i":
+            sim_for_temp = text_features @ image_features.T
+        elif per_sample_temp_similarity == "i2t":
+            sim_for_temp = image_features @ text_features.T
+        elif per_sample_temp_similarity == "t2t":
+            sim_for_temp = text_features @ text_features.T
+        elif per_sample_temp_similarity == "i2i":
+            sim_for_temp = image_features @ image_features.T
+        else:
+            raise ValueError(
+                f"Unknown use_similarity: {per_sample_temp_similarity}. Use t2i, i2t, t2t or i2i"
+            )
 
         # First, compute normal CLIP loss.
+        sim = text_features @ image_features.T
         sim_clip_loss = sim / self.temperature
         labels = torch.arange(image_features.shape[0], device=image_features.device)
 
@@ -634,12 +648,21 @@ class Scheduled_CLIP_Loss(nn.Module):
 
         clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
-        # Next, compute the similarity based loss.
-        per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
-            (sim + 1.0) / 2.0
-        )
+        print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
+        if per_sample_temp_mapping == "adaptive_with_base":
+            per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+                (sim_for_temp + 1.0) / 2.0
+            )
+        elif per_sample_temp_mapping == "adaptive_without_base":
+            per_sample_temperature = self.alpha * torch.sqrt(
+                (sim_for_temp + 1.0) / 2.0
+            ) + 1e-9
+        else:
+            raise ValueError(
+                f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
+            )
 
-        sim_per_sample = sim / per_sample_temperature
+        sim_per_sample = sim_for_temp / per_sample_temperature
         labels = torch.arange(image_features.shape[0], device=image_features.device)
 
         sim_per_sample_t2i_loss = F.cross_entropy(sim_per_sample, labels)

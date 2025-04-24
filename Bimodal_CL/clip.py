@@ -1278,9 +1278,7 @@ def main(args):
     vision_expert_model = None
     if args.enable_vision_expert:
         print(f"Loading vision expert model {args.vision_expert_model}...")
-        vision_expert_model = AutoModel.from_pretrained(
-            args.vision_expert_model
-        )
+        vision_expert_model = AutoModel.from_pretrained(args.vision_expert_model)
         vision_expert_model = vision_expert_model.to(device)
 
         vision_expert_model = torch.nn.parallel.DistributedDataParallel(
@@ -1724,6 +1722,17 @@ if __name__ == "__main__":
     parser.add_argument("--pct_tau_min", default=0.01, type=float)
     parser.add_argument("--pct_tau_max", default=0.02, type=float)
     parser.add_argument("--offset", default=0.0, type=float)
+
+    parser.add_argument(
+        "--per_sample_temp_similarity",
+        default="t2i",
+        choices=["i2t", "t2i", "t2t", "i2i"],
+    )
+    parser.add_argument(
+        "--per_sample_temp_mapping",
+        default="adaptive_with_base",
+        choices=["adaptive_with_base", "adaptive_without_base"],
+    )
 
     # cc3m
     parser.add_argument(

@@ -373,6 +373,8 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 current_step=current_step,
+                per_sample_temp_similarity=args.per_sample_temp_similarity,
+                per_sample_temp_mapping=args.per_sample_temp_mapping,
             )
         elif self.ita_type == "clip_moe_text":
             loss_ita = self.criterion(
