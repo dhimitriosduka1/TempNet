@@ -373,6 +373,7 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 current_step=current_step,
+                include_alignment_loss=args.include_alignment_loss,
                 per_sample_temp_similarity=args.per_sample_temp_similarity,
                 per_sample_temp_mapping=args.per_sample_temp_mapping,
             )

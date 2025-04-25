@@ -1774,6 +1774,8 @@ if __name__ == "__main__":
     parser.add_argument("--enable_vision_expert", action="store_true")
     parser.add_argument("--vision_expert_model", default="facebook/dinov2-large")
 
+    parser.add_argument("--include_alignment_loss", action="store_true")
+
     args = parser.parse_args()
 
     # Validation

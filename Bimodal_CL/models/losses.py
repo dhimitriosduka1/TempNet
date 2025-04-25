@@ -360,6 +360,7 @@ class CLIP_MoE_Text_Loss(nn.Module):
 
         return total_loss
 
+
 class CLIP_MoE_Vision_Loss(nn.Module):
     def __init__(
         self,
@@ -402,7 +403,7 @@ class CLIP_MoE_Vision_Loss(nn.Module):
         per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
             (i2i_expert_sim + 1.0) / 2.0
         )
-        
+
         # i2i loss on CLIP space
         i2i_sim = (image_features @ image_features.T) / per_sample_temperature
         i2i_loss = F.cross_entropy(i2i_sim, labels)
@@ -428,6 +429,7 @@ class CLIP_MoE_Vision_Loss(nn.Module):
             )
 
         return total_loss
+
 
 class CLIP_MoE_Blending_Loss(nn.Module):
     def __init__(
@@ -618,6 +620,7 @@ class Scheduled_CLIP_Loss(nn.Module):
         image_features,
         text_features,
         current_step,
+        include_alignment_loss=False,
         per_sample_temp_similarity="t2i",
         per_sample_temp_mapping="adaptive_with_base",
     ):
@@ -654,9 +657,9 @@ class Scheduled_CLIP_Loss(nn.Module):
                 (sim_for_temp + 1.0) / 2.0
             )
         elif per_sample_temp_mapping == "adaptive_without_base":
-            per_sample_temperature = self.alpha * torch.sqrt(
-                (sim_for_temp + 1.0) / 2.0
-            ) + 1e-9
+            per_sample_temperature = (
+                self.alpha * torch.sqrt((sim_for_temp + 1.0) / 2.0) + 1e-9
+            )
         else:
             raise ValueError(
                 f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
@@ -688,6 +691,10 @@ class Scheduled_CLIP_Loss(nn.Module):
             clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
         )
 
+        if include_alignment_loss:
+            alignment_loss = -torch.mean(torch.log(torch.diagonal((sim + 1.0) / 2.0)))
+            total_loss += alignment_loss
+
         log_obj = {
             "train/temperature": self.temperature,
             "train/t2i_loss": clip_t2i_loss.item(),
@@ -697,6 +704,9 @@ class Scheduled_CLIP_Loss(nn.Module):
             "train/clip_loss_weight": clip_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
         }
+
+        if include_alignment_loss:
+            log_obj["train/alignment_loss"] = alignment_loss.item()
 
         log_obj.update(get_temperature_statistics(per_sample_temperature))
 
