@@ -99,13 +99,14 @@ def preprocess(sample):
 
 try:
     dataset = (
-        wds.WebDataset(tar_files)
+        wds.WebDataset(tar_paths, nodesplitter=wds.split_by_node)
+        .shuffle(0)
         .decode("pil")
         .map(preprocess)
         .select(lambda x: x is not None)
         .batched(args.batch_size)
     )
-    logger.info(f"WebDataset created from: {tar_files}")
+    logger.info(f"WebDataset created from: {tar_paths}")
 except Exception as e:
     logger.error(f"Error creating WebDataset: {e}")
     exit(1)
