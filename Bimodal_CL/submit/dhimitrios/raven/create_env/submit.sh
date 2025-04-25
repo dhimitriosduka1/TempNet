@@ -22,7 +22,9 @@ export RUSTFLAGS="-A invalid_reference_casting"
 conda init bash
 source ~/.bashrc
 
-conda env create --force -f /u/dduka/work/projects/TempNet/Bimodal_CL/environment.yaml
+# conda env create --force -f /u/dduka/work/projects/TempNet/Bimodal_CL/environment.yaml
 conda activate bimodal_cl
+
+pip install accelerate
 
 echo "Environment created"

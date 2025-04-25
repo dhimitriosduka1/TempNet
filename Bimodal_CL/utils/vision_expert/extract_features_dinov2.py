@@ -67,6 +67,8 @@ logger.info(f"Embeddings will be saved to: {output_dir}")
 accelerator = Accelerator()
 logger.info(f"Using device: {accelerator.device}")
 
+unprocessed_samples = []
+
 try:
     processor = AutoProcessor.from_pretrained(model_name)
 
@@ -93,7 +95,8 @@ def preprocess(sample):
         inputs = processor(images=image, return_tensors="pt")
         return {"pixel_values": inputs.pixel_values[0], "key": key}
     except Exception as e:
-        logger.error(f"Error processing sample {sample.get('__url__')}: {e}")
+        logger.error(f"Error processing sample {sample.get('__key__')}: {e}")
+        unprocessed_samples.append(sample)
         return None
 
 
@@ -151,3 +154,12 @@ for batch_idx, batch in enumerate(tqdm(dataloader, desc="Extracting Embeddings")
 
 if accelerator.is_main_process:
     logger.info(f"Embedding extraction complete. Embeddings saved to {output_dir}")
+
+if len(unprocessed_samples) > 0:
+    logger.info(
+        f"Some samples could not be processed. {len(unprocessed_samples)} unprocessed samples."
+    )
+    import json
+
+    with open(os.path.join(output_dir, "unprocessed_samples.json"), "w") as f:
+        json.dump(unprocessed_samples, f)
