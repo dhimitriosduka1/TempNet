@@ -70,9 +70,6 @@ cm = ConfigManager()
 # Imports for text expert
 from sentence_transformers import SentenceTransformer
 
-# Imports for vision expert
-from transformers import AutoModel
-
 
 def train(
     model,
@@ -89,7 +86,6 @@ def train(
     args,
     eval_objects,
     txt_expert_model,
-    vision_expert_model,
 ):
     # train
     model.train()
@@ -150,6 +146,8 @@ def train(
         idx = batch["idx"]
         text_idx = batch["text_idx"]
 
+        expert_image_embedding = batch["expert_image_embedding"]
+
         if i % 500 == 0:
             model.eval()
             (
@@ -199,6 +197,11 @@ def train(
             return_tensors="pt",
         ).to(device)
 
+        if args.enable_vision_expert:
+            expert_image_embedding = expert_image_embedding.to(
+                device, non_blocking=True
+            )
+
         if grad_scaler is None:
             assert 0
         else:
@@ -245,7 +248,7 @@ def train(
                     current_step=global_it,
                     txt_expert_model=txt_expert_model,
                     raw_text=texts,
-                    vision_expert_model=vision_expert_model,
+                    expert_image_embedding=expert_image_embedding,
                 )
 
                 if utils.is_main_process():
@@ -1275,21 +1278,6 @@ def main(args):
         text_expert_model.eval()
         print("Text expert model loaded and set to eval mode.")
 
-    vision_expert_model = None
-    if args.enable_vision_expert:
-        print(f"Loading vision expert model {args.vision_expert_model}...")
-        vision_expert_model = AutoModel.from_pretrained(args.vision_expert_model)
-        vision_expert_model = vision_expert_model.to(device)
-
-        vision_expert_model = torch.nn.parallel.DistributedDataParallel(
-            vision_expert_model,
-            device_ids=[args.gpu],
-            find_unused_parameters=True,
-        )
-
-        vision_expert_model.eval()
-        print("Vision expert model loaded and set to eval mode.")
-
     if args.use_amp:
         grad_scaler = torch.cuda.amp.GradScaler()
     else:
@@ -1378,7 +1366,6 @@ def main(args):
             args,
             eval_objects=eval_objects,
             txt_expert_model=text_expert_model,
-            vision_expert_model=vision_expert_model,
         )
 
         # save tau for visualization
@@ -1772,7 +1759,10 @@ if __name__ == "__main__":
     parser.add_argument("--sim_blend_ratio", default=0.0, type=float)
 
     parser.add_argument("--enable_vision_expert", action="store_true")
-    parser.add_argument("--vision_expert_model", default="facebook/dinov2-large")
+    parser.add_argument(
+        "--vision_embeddings_base_path",
+        default=cm.get_config_for("vision_embeddings_base_path"),
+    )
 
     parser.add_argument("--include_alignment_loss", action="store_true")
 

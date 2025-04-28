@@ -212,7 +212,7 @@ class CLIP(nn.Module):
         current_step=None,
         txt_expert_model=None,
         raw_text=None,
-        vision_expert_model=None
+        expert_image_embedding=None,
     ):
         if self.learnable_temp:
             with torch.no_grad():
@@ -267,24 +267,6 @@ class CLIP(nn.Module):
                 txt_embeds_expert = txt_expert_model.module.encode(
                     raw_text, convert_to_tensor=True, normalize_embeddings=True
                 )
-        
-        image_embeds_expert = None
-        if vision_expert_model is not None:
-            assert self.ita_type in [
-                "clip_moe_vision",
-                "clip_moe_blend",
-                "clip_meo_vision_supervision",
-            ], "vision_expert_model should only be used with clip_moe_vision, clip_moe_blend or clip_meo_vision_supervision"
-
-            with torch.no_grad():
-                # Based on this issue, https://github.com/huggingface/transformers/issues/27977#issuecomment-1852623838
-                # we do not need to resize the 256x256 image to another dimention for DINOv2
-                image_embeds_expert = vision_expert_model.module(
-                    image
-                )
-                # We only need the class token for each image.
-                image_embeds_expert = image_embeds_expert.last_hidden_state[:, 0, :]
-                image_embeds_expert = torch.nn.functional.normalize(image_embeds_expert, dim=1, p=2)
 
         if return_feat:
             return image_feat, text_feat
@@ -388,7 +370,7 @@ class CLIP(nn.Module):
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,
-                image_expert_features=image_embeds_expert,
+                image_expert_features=expert_image_embedding,
                 args=args,
             )
         elif self.ita_type == "clip_moe_blend":
@@ -396,7 +378,7 @@ class CLIP(nn.Module):
                 image_features=image_feat,
                 text_features=text_feat,
                 text_expert_features=txt_embeds_expert,
-                image_expert_features=image_embeds_expert,
+                image_expert_features=expert_image_embedding,
                 args=args,
             )
         elif self.ita_type == "clip_meo_text_supervision":

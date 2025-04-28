@@ -4,6 +4,7 @@ import json
 import torch
 import pickle
 import random
+import numpy as np
 import webdataset as wds
 from dataset.utils import pre_caption
 import PIL.Image as Image
@@ -39,9 +40,7 @@ def get_val_dataset_size():
 
 
 def get_train_shards(base_path):
-    return _get_shard_list(
-        start_index=0, end_index=110, base_path=base_path
-    )
+    return _get_shard_list(start_index=0, end_index=110, base_path=base_path)
 
 
 def get_val_shards():
@@ -67,12 +66,24 @@ def decoder_pth(key, value):
         return image
 
 
+def load_image_embedding(vision_embeddings_base_path, key):
+    # First check if the file exists
+    embedding_path = os.path.join(vision_embeddings_base_path, f"{key}.npz")
+
+    if not os.path.exists(embedding_path):
+        print(f"File {embedding_path} does not exist.")
+        return None
+
+    # Load the embeddings
+    return np.load(embedding_path)["embedding"].astype(np.float32)
+
+
 def make_dataset_train(
     transform,
     args,
     max_words=30,
 ):
-    
+
     def create_image_indexer(captions):
         img2idx = {}
         idx = 0
@@ -83,13 +94,13 @@ def make_dataset_train(
             if image_id not in img2idx:
                 img2idx[image_id] = idx
                 idx += 1
-        
+
         return img2idx
-    
+
     def load_captions():
         with open(args.captions_path, "r") as f:
             return json.load(f)
-            
+
     def load_extended_captions():
         with open(args.cc3m_extended_captions_path, "r") as f:
             data = json.load(f)
@@ -99,9 +110,30 @@ def make_dataset_train(
             return {k.split("_", 1)[1]: v for k, v in data.items()}
 
     def make_sample_train(
-        sample, extended_captions=None, enable_i2i_loss=False, enable_t2t_loss=False
+        sample,
+        extended_captions=None,
+        enable_i2i_loss=False,
+        enable_t2t_loss=False,
     ):
         key = sample["__key__"]
+
+        expert_image_embedding = None
+        # If vision expert is enabled, check if embedding exists before processing the sample
+        if args.enable_vision_expert:
+            expert_image_embedding = load_image_embedding(
+                args.vision_embeddings_base_path, key
+            )
+
+            if expert_image_embedding is None:
+                return None
+
+            # Convert to tensor
+            expert_image_embedding = torch.from_numpy(expert_image_embedding)
+            # Normalize the embedding
+            expert_image_embedding = expert_image_embedding / torch.norm(
+                expert_image_embedding
+            )
+
         image = sample["image.pth"]
         caption = sample["metadata.pyd"]["caption"]
 
@@ -132,8 +164,9 @@ def make_dataset_train(
             "key": key,
             "idx": idx,
             "text_idx": text_idx,
+            "expert_image_embedding": expert_image_embedding,
         }
-    
+
     captions = load_captions()
     img2idx = create_image_indexer(captions)
 
@@ -152,7 +185,15 @@ def make_dataset_train(
     train_set = (
         train_set.shuffle(1000)
         .decode(decoder_pth)
-        .map(lambda sample: make_sample_train(sample, extended_captions, args.enable_i2i_loss, args.enable_t2t_loss))
+        .map(
+            lambda sample: make_sample_train(
+                sample,
+                extended_captions,
+                args.enable_i2i_loss,
+                args.enable_t2t_loss,
+            )
+        )
+        .select(lambda x: x is not None)
     )
     train_set = train_set.batched(args.batch_size_train)
     return train_set
