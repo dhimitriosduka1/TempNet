@@ -773,6 +773,9 @@ class SogCLR_Loss(nn.Module):
         self.gamma = gamma
         self.temperature = temperature
         self.eps = 1e-14
+    
+    def set_temperature(self, temperature):
+        self.temperature = temperature
 
     def forward(self, image_features, text_features, image_ids, text_ids, epoch):
 
