@@ -197,7 +197,7 @@ def train(
             return_tensors="pt",
         ).to(device)
 
-        if expert_image_embedding is not None:
+        if args.enable_vision_expert:
             expert_image_embedding = expert_image_embedding.to(
                 device, non_blocking=True
             )

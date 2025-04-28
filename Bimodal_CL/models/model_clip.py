@@ -389,7 +389,7 @@ class CLIP(nn.Module):
             )
         else:
             raise NotImplementedError
-``
+
         return loss_ita, info_dict
 
 
