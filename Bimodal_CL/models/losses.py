@@ -777,6 +777,12 @@ class SogCLR_Loss(nn.Module):
     def set_temperature(self, temperature):
         self.temperature = temperature
 
+    def set_i2i_temperature(self, i2i_temperature):
+        pass
+    
+    def set_t2t_temperature(self, t2t_temperature):
+        pass
+
     def forward(self, image_features, text_features, image_ids, text_ids, epoch):
 
         # Inputs:
