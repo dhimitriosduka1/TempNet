@@ -660,6 +660,12 @@ class Scheduled_CLIP_Loss(nn.Module):
             per_sample_temperature = (
                 self.alpha * torch.sqrt((sim_for_temp + 1.0) / 2.0) + 1e-9
             )
+        elif per_sample_temp_mapping == "cosine":
+            min_temperature = self.temperature
+            max_temperature = self.alpha + self.temperature
+            per_sample_temperature = min_temperature + 0.5 * (
+                max_temperature - min_temperature
+            ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_for_temp)))
         else:
             raise ValueError(
                 f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
@@ -773,13 +779,13 @@ class SogCLR_Loss(nn.Module):
         self.gamma = gamma
         self.temperature = temperature
         self.eps = 1e-14
-    
+
     def set_temperature(self, temperature):
         self.temperature = temperature
 
     def set_i2i_temperature(self, i2i_temperature):
         pass
-    
+
     def set_t2t_temperature(self, t2t_temperature):
         pass
 

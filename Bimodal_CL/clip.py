@@ -1718,7 +1718,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--per_sample_temp_mapping",
         default="adaptive_with_base",
-        choices=["adaptive_with_base", "adaptive_without_base"],
+        choices=["adaptive_with_base", "adaptive_without_base", "cosine"],
     )
 
     # cc3m
