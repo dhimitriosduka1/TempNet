@@ -7,6 +7,7 @@ from .tanh_lr import TanhLRScheduler
 from .step_lr import StepLRScheduler
 from .plateau_lr import PlateauLRScheduler
 from .midpoint_step_lr import MidpointStepLRScheduler
+from .linear_lr import LinearLRScheduler
 
 
 def create_scheduler(args, optimizer):
@@ -91,6 +92,11 @@ def create_scheduler(args, optimizer):
             lr_start=args.lr_start,
             lr_end=args.lr_end,
             num_epochs=num_epochs,
+        )
+    elif args.sched == "linear":
+        lr_scheduler = LinearLRScheduler(
+            optimizer=optimizer,
+            lr_value=args.lr_start,
         )
 
     return lr_scheduler, num_epochs

@@ -1393,7 +1393,7 @@ def main(args):
         with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
             f.write(json.dumps(log_stats) + "\n")
 
-        if args.sched == "midpoint":
+        if args.sched == "midpoint" or args.sched == "linear":
             # This scheduler just needs the number of epochs and nothing else
             lr_scheduler.step(epoch)
         else:
@@ -1580,7 +1580,7 @@ if __name__ == "__main__":
 
     # optimizer and schedular
     parser.add_argument("--opt", default="adamW")
-    parser.add_argument("--sched", default="cosine", choices=["cosine", "midpoint"])
+    parser.add_argument("--sched", default="cosine", choices=["cosine", "midpoint", "constant"])
     parser.add_argument("--lr", default=2e-4, type=float)
     parser.add_argument("--min_lr", default=1e-5, type=float)
     parser.add_argument("--lr_temp_net", default=6e-6, type=float)
