@@ -31,13 +31,13 @@ ITA_TYPE=scheduled_clip_loss
 BASE_TAU=0.01
 ALPHA=0.04
 
-DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD_I2T
+DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_LINEAR_${LR}_QUAD_I2T
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_quad_i2t/ \
+    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_linear_lr_8e-4_quad_i2t/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
