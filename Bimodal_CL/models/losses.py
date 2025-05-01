@@ -14,7 +14,7 @@ import utils
 
 
 # Function responsible for extracting different statistics from the custom per sample temperature tensor
-def get_temperature_statistics(per_sample_temperature):
+def get_temperature_statistics(per_sample_temperature, prefix="train/"):
     min_per_sample_temperature = per_sample_temperature.min().item()
     max_per_sample_temperature = per_sample_temperature.max().item()
     avg_per_sample_temperature = per_sample_temperature.mean().item()
@@ -44,21 +44,21 @@ def get_temperature_statistics(per_sample_temperature):
     )
 
     return {
-        "train/min_per_sample_temperature": min_per_sample_temperature,
-        "train/max_per_sample_temperature": max_per_sample_temperature,
-        "train/avg_per_sample_temperature": avg_per_sample_temperature,
-        "train/median_per_sample_temperature": median_per_sample_temperature,
-        "train/quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
-        "train/positive_samples_min_temperature": positive_samples_min_temperature,
-        "train/positive_samples_max_temperature": positive_samples_max_temperature,
-        "train/positive_samples_avg_temperature": positive_samples_avg_temperature,
-        "train/positive_samples_median_temperature": positive_samples_median_temperature,
-        "train/positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
-        "train/negative_samples_min_temperature": negative_samples_min_temperature,
-        "train/negative_samples_max_temperature": negative_samples_max_temperature,
-        "train/negative_samples_avg_temperature": negative_samples_avg_temperature,
-        "train/negative_samples_median_temperature": negative_samples_median_temperature,
-        "train/negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
+        f"{prefix}min_per_sample_temperature": min_per_sample_temperature,
+        f"{prefix}max_per_sample_temperature": max_per_sample_temperature,
+        f"{prefix}avg_per_sample_temperature": avg_per_sample_temperature,
+        f"{prefix}median_per_sample_temperature": median_per_sample_temperature,
+        f"{prefix}quantile_0.5_per_sample_temperature": quantile_0_5_per_sample_temperature,
+        f"{prefix}positive_samples_min_temperature": positive_samples_min_temperature,
+        f"{prefix}positive_samples_max_temperature": positive_samples_max_temperature,
+        f"{prefix}positive_samples_avg_temperature": positive_samples_avg_temperature,
+        f"{prefix}positive_samples_median_temperature": positive_samples_median_temperature,
+        f"{prefix}positive_samples_quantile_0.5_temperature": positive_samples_quantile_0_5_temperature,
+        f"{prefix}negative_samples_min_temperature": negative_samples_min_temperature,
+        f"{prefix}negative_samples_max_temperature": negative_samples_max_temperature,
+        f"{prefix}negative_samples_avg_temperature": negative_samples_avg_temperature,
+        f"{prefix}negative_samples_median_temperature": negative_samples_median_temperature,
+        f"{prefix}negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
     }
 
 
@@ -715,6 +715,137 @@ class Scheduled_CLIP_Loss(nn.Module):
             log_obj["train/alignment_loss"] = alignment_loss.item()
 
         log_obj.update(get_temperature_statistics(per_sample_temperature))
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
+class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+        total_steps=None,
+        clip_scheduled_loss_type="none",
+    ):
+        super(Scheduled_Crossmodal_CLIP_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+        self.total_steps = total_steps
+        self.clip_scheduled_loss_type = clip_scheduled_loss_type
+
+        assert (
+            total_steps is not None
+        ), "total_steps must be provided for Scheduled_Crossmodal_CLIP_Loss"
+
+        assert (
+            self.clip_scheduled_loss_type != "none"
+        ), "clip_scheduled_loss_type must be provided for Scheduled_Crossmodal_CLIP_Loss"
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        current_step,
+        per_sample_temp_mapping="adaptive_with_base",
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+        # First, compute normal CLIP loss.
+        sim_t2i = text_features @ image_features.T
+        sim_clip_loss = sim_t2i / self.temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_t2i_loss = F.cross_entropy(sim_clip_loss, labels)
+        clip_i2t_loss = F.cross_entropy(sim_clip_loss.t(), labels)
+
+        clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
+
+        print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
+        if per_sample_temp_mapping == "adaptive_with_base":
+            per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+                (sim_t2i + 1.0) / 2.0
+            )
+
+            per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+                (sim_t2i.t() + 1.0) / 2.0
+            )
+
+        elif per_sample_temp_mapping == "adaptive_without_base":
+            per_sample_temp_t2i = self.alpha * torch.sqrt((sim_t2i + 1.0) / 2.0)
+
+            per_sample_temp_i2t = self.alpha * torch.sqrt((sim_t2i.t() + 1.0) / 2.0)
+
+        elif per_sample_temp_mapping == "cosine":
+            min_temperature = self.temperature
+            max_temperature = self.alpha + self.temperature
+
+            per_sample_temp_t2i = min_temperature + 0.5 * (
+                max_temperature - min_temperature
+            ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_t2i)))
+
+            per_sample_temp_i2t = min_temperature + 0.5 * (
+                max_temperature - min_temperature
+            ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_t2i.t())))
+        else:
+            raise ValueError(
+                f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base, adaptive_without_base or cosine"
+            )
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        sim_per_sample_t2i_loss = F.cross_entropy(sim_t2i / per_sample_temp_t2i, labels)
+        sim_per_sample_i2t_loss = F.cross_entropy(sim_t2i.t() / per_sample_temp_i2t, labels)
+
+        sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
+
+        normalized_current_step = current_step / self.total_steps
+
+        if self.clip_scheduled_loss_type == "quadratic":
+            clip_loss_weight = (normalized_current_step - 1.0) ** 2
+            sim_loss_weight = normalized_current_step**2
+        elif self.clip_scheduled_loss_type == "linear":
+            clip_loss_weight = 1.0 - normalized_current_step
+            sim_loss_weight = normalized_current_step
+        else:
+            raise ValueError(
+                f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
+            )
+
+        # Combine the two losses using a weighted sum
+        total_loss = (
+            clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
+        )
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/t2i_loss": clip_t2i_loss.item(),
+            "train/i2t_loss": clip_i2t_loss.item(),
+            "train/sim_t2i_loss": sim_per_sample_t2i_loss.item(),
+            "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
+            "train/clip_loss_weight": clip_loss_weight,
+            "train/sim_loss_weight": sim_loss_weight,
+        }
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_i2t, prefix="train/i2t/")
+        )
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_t2i, prefix="train/t2i/")
+        )
 
         if utils.is_main_process():
             wandb.log(

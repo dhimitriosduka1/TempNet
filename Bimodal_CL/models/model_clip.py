@@ -18,6 +18,7 @@ from models.losses import (
     CLIP_MoE_Vision_Loss,
     CLIP_MoE_Blending_Loss,
     CLIP_MoE_Text_Supervision,
+    Scheduled_Crossmodal_CLIP_Loss,
 )
 
 import torch
@@ -157,6 +158,15 @@ class CLIP(nn.Module):
         elif self.ita_type == "scheduled_clip_loss":
             print(f"Using Scheduled_CLIP_Loss")
             self.criterion = Scheduled_CLIP_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+                total_steps=total_steps,
+                clip_scheduled_loss_type=clip_scheduled_loss_type,
+            )
+        elif self.ita_type == "scheduled_crossmodal_clip_loss":
+            print(f"Using Scheduled_CLIP_Loss")
+            self.criterion = Scheduled_Crossmodal_CLIP_Loss(
                 world_size=world_size,
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
@@ -357,6 +367,14 @@ class CLIP(nn.Module):
                 current_step=current_step,
                 include_alignment_loss=args.include_alignment_loss,
                 per_sample_temp_similarity=args.per_sample_temp_similarity,
+                per_sample_temp_mapping=args.per_sample_temp_mapping,
+            )
+        elif self.ita_type == "scheduled_crossmodal_clip_loss":
+            print(f"Using Scheduled_CLIScheduled_Crossmodal_CLIP_LossP_Loss")
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                current_step=current_step,
                 per_sample_temp_mapping=args.per_sample_temp_mapping,
             )
         elif self.ita_type == "clip_moe_text":
