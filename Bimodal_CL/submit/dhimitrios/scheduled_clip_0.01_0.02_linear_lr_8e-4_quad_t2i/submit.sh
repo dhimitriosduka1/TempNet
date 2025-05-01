@@ -37,7 +37,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --ita_type $ITA_TYPE \
     --sim_based_loss_alpha $ALPHA \
     --temp $BASE_TAU \
-    --sched constant \
+    --sched linear \
     --per_sample_temp_similarity t2i \
     --per_sample_temp_mapping adaptive_with_base \
     --clip_scheduled_loss_type quadratic \
