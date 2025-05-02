@@ -1025,6 +1025,105 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         return total_loss
 
 
+class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        alpha=0.1,
+        total_steps=None,
+    ):
+        super(Scheduled_Crossmodal_With_Augmentations_CLIP_Loss, self).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.alpha = alpha
+        self.total_steps = total_steps
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        image_expert_features,
+        text_expert_features,
+        current_step,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+            image_expert_features = torch.cat(
+                GatherLayer.apply(image_expert_features), dim=0
+            )
+
+            text_expert_features = torch.cat(
+                GatherLayer.apply(text_expert_features), dim=0
+            )
+
+        # First, compute normal CLIP loss.
+        sim_t2i = text_features @ image_features.T
+        sim_clip_loss = sim_t2i / self.temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_t2i_loss = F.cross_entropy(sim_clip_loss, labels)
+        clip_i2t_loss = F.cross_entropy(sim_clip_loss.t(), labels)
+
+        clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
+
+        sim_t2i_expert = text_expert_features @ image_expert_features.T
+        per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+            (sim_t2i_expert + 1.0) / 2.0
+        )
+
+        per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+            (sim_t2i_expert.t() + 1.0) / 2.0
+        )
+
+        sim_per_sample_t2i_loss = F.cross_entropy(sim_t2i_expert / per_sample_temp_t2i, labels)
+        sim_per_sample_i2t_loss = F.cross_entropy(
+            sim_t2i_expert.t() / per_sample_temp_i2t, labels
+        )
+
+        sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
+
+        normalized_current_step = current_step / self.total_steps
+        clip_loss_weight = (normalized_current_step - 1.0) ** 2
+        sim_loss_weight = normalized_current_step**2
+    
+        # Combine the two losses using a weighted sum
+        total_loss = (
+            clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
+        )
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/t2i_loss": clip_t2i_loss.item(),
+            "train/i2t_loss": clip_i2t_loss.item(),
+            "train/sim_t2i_loss": sim_per_sample_t2i_loss.item(),
+            "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
+            "train/clip_loss_weight": clip_loss_weight,
+            "train/sim_loss_weight": sim_loss_weight,
+        }
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_i2t, prefix="train/i2t/")
+        )
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_t2i, prefix="train/t2i/")
+        )
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
 class CLIP_Loss_PCT(nn.Module):
     def __init__(self, world_size=8, temperature=0.01):
         super(CLIP_Loss_PCT, self).__init__()
