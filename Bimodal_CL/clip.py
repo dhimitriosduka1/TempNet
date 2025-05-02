@@ -1643,6 +1643,7 @@ if __name__ == "__main__":
             "clip_meo_text_supervision",
             "scheduled_crossmodal_clip_loss",
             "clip_moe_vision_and_text",
+            "scheduled_clip_moe_text",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)

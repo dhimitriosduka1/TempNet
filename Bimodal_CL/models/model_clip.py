@@ -20,6 +20,7 @@ from models.losses import (
     CLIP_MoE_Text_Supervision,
     Scheduled_Crossmodal_CLIP_Loss,
     CLIP_MoE_Vision_And_Text_Loss,
+    Scheduled_CLIP_MoE_Text_Loss,
 )
 
 import torch
@@ -211,6 +212,14 @@ class CLIP(nn.Module):
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
             )
+        elif self.ita_type == "scheduled_clip_moe_text":
+            print("Using Scheduled_CLIP_MoE_Text_Loss")
+            self.criterion = Scheduled_CLIP_MoE_Text_Loss(
+                world_size=world_size,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+                total_steps=total_steps,
+            )
         else:
             raise NotImplementedError
 
@@ -281,7 +290,8 @@ class CLIP(nn.Module):
                 "clip_moe_blend",
                 "clip_meo_text_supervision",
                 "clip_moe_vision_and_text",
-            ], "txt_expert_model should only be used with clip_moe_text, clip_moe_blend, clip_meo_text_supervision, or clip_moe_vision_and_text"
+                "scheduled_clip_moe_text",
+            ], "txt_expert_model should only be used with clip_moe_text, clip_moe_blend, clip_meo_text_supervision, clip_moe_vision_and_text or scheduled_clip_moe_text"
             with torch.no_grad():
                 txt_embeds_expert = txt_expert_model.module.encode(
                     raw_text, convert_to_tensor=True, normalize_embeddings=True
@@ -421,6 +431,13 @@ class CLIP(nn.Module):
                 image_expert_features=expert_image_embedding,
                 text_expert_features=txt_embeds_expert,
                 args=args,
+            )
+        elif self.ita_type == "scheduled_clip_moe_text":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                text_expert_features=txt_embeds_expert,
+                current_step=current_step,
             )
         else:
             raise NotImplementedError
