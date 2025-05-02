@@ -1046,20 +1046,20 @@ class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
         self,
         image_features,
         text_features,
-        image_expert_features,
-        text_expert_features,
+        augmented_image_features,
+        augmented_text_features,
         current_step,
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
 
-            image_expert_features = torch.cat(
-                GatherLayer.apply(image_expert_features), dim=0
+            augmented_image_features = torch.cat(
+                GatherLayer.apply(augmented_image_features), dim=0
             )
 
-            text_expert_features = torch.cat(
-                GatherLayer.apply(text_expert_features), dim=0
+            augmented_text_features = torch.cat(
+                GatherLayer.apply(augmented_text_features), dim=0
             )
 
         # First, compute normal CLIP loss.
@@ -1072,7 +1072,7 @@ class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
 
         clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
-        sim_t2i_expert = text_expert_features @ image_expert_features.T
+        sim_t2i_expert = augmented_text_features @ augmented_image_features.T
         per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
             (sim_t2i_expert + 1.0) / 2.0
         )
