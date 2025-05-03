@@ -1291,7 +1291,7 @@ class SogCLR_Loss(nn.Module):
         return total_loss
 
 
-class Scheduled_SogCLR_Loss(nn.Module):
+class Scheduled_SogCLR_Crossmodal_Loss(nn.Module):
     def __init__(
         self,
         N=2900000,
@@ -1301,7 +1301,7 @@ class Scheduled_SogCLR_Loss(nn.Module):
         alpha=0.1,
         total_steps=None,
     ):
-        super(Scheduled_SogCLR_Loss, self).__init__()
+        super(Scheduled_SogCLR_Crossmodal_Loss, self).__init__()
         self.world_size = world_size
         self.s_I = torch.zeros(N).cuda()
         self.s_T = torch.zeros(N).cuda()
@@ -1450,6 +1450,7 @@ class Scheduled_SogCLR_Loss(nn.Module):
             "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
             "train/sogclr_loss_weight": sogclr_loss_weight,
             "train/sim_loss_weight": sim_loss_weight,
+            "train/gamma": self.gamma,
         }
 
         log_obj.update(

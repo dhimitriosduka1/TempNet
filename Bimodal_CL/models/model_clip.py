@@ -22,7 +22,7 @@ from models.losses import (
     CLIP_MoE_Vision_And_Text_Loss,
     Scheduled_CLIP_MoE_Text_Loss,
     Scheduled_Crossmodal_With_Augmentations_CLIP_Loss,
-    Scheduled_SogCLR_Loss,
+    Scheduled_SogCLR_Crossmodal_Loss,
 )
 
 import torch
@@ -230,9 +230,9 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
             )
-        elif self.ita_type == "scheduled_sogclr":
-            print("Using Scheduled_SogCLR_Loss")
-            self.criterion = Scheduled_SogCLR_Loss(
+        elif self.ita_type == "scheduled_sogclr_crossmodal":
+            print("Using Scheduled_SogCLR_Crossmodal_Loss")
+            self.criterion = Scheduled_SogCLR_Crossmodal_Loss(
                 N=N,
                 world_size=world_size,
                 gamma=sogclr_gamma,
@@ -467,7 +467,7 @@ class CLIP(nn.Module):
                 augmented_text_features=augmented_text_feat,
                 current_step=current_step,
             )
-        elif self.ita_type == "scheduled_sogclr":
+        elif self.ita_type == "scheduled_sogclr_crossmodal":
             image_ids = concat_all_gather(idx)
             text_ids = concat_all_gather(text_idx)
             loss_ita = self.criterion(
