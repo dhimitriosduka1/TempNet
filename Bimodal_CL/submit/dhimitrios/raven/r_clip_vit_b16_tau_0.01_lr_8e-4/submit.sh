@@ -40,4 +40,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --epochs 30 --lr $LR \
     --ita_type $ITA_TYPE \
     --image_encoder vit_base_patch16_224 \
-    --image_size 224 \
+    --image_res 224 \
