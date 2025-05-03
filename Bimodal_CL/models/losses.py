@@ -1081,7 +1081,9 @@ class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
             (sim_t2i_expert.t() + 1.0) / 2.0
         )
 
-        sim_per_sample_t2i_loss = F.cross_entropy(sim_t2i_expert / per_sample_temp_t2i, labels)
+        sim_per_sample_t2i_loss = F.cross_entropy(
+            sim_t2i_expert / per_sample_temp_t2i, labels
+        )
         sim_per_sample_i2t_loss = F.cross_entropy(
             sim_t2i_expert.t() / per_sample_temp_i2t, labels
         )
@@ -1091,7 +1093,7 @@ class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
         normalized_current_step = current_step / self.total_steps
         clip_loss_weight = (normalized_current_step - 1.0) ** 2
         sim_loss_weight = normalized_current_step**2
-    
+
         # Combine the two losses using a weighted sum
         total_loss = (
             clip_loss_weight * clip_total_loss + sim_loss_weight * sim_total_loss
@@ -1291,7 +1293,13 @@ class SogCLR_Loss(nn.Module):
 
 class Scheduled_SogCLR_Loss(nn.Module):
     def __init__(
-        self, N=2900000, gamma=0.1, temperature=0.07, world_size=8, alpha=0.05
+        self,
+        N=2900000,
+        gamma=0.1,
+        temperature=0.07,
+        world_size=8,
+        alpha=0.1,
+        total_steps=None,
     ):
         super(Scheduled_SogCLR_Loss, self).__init__()
         self.world_size = world_size
@@ -1302,7 +1310,10 @@ class Scheduled_SogCLR_Loss(nn.Module):
         self.gamma = gamma
         self.temperature = temperature
         self.eps = 1e-14
+
+        # Additional parameters for scheduled loss
         self.alpha = alpha
+        self.total_steps = total_steps
 
     def set_temperature(self, temperature):
         self.temperature = temperature
@@ -1320,16 +1331,16 @@ class Scheduled_SogCLR_Loss(nn.Module):
         image_ids,
         text_ids,
         epoch,
-        current_step,
-        per_sample_temp_similarity="t2i",
-        per_sample_temp_mapping="adaptive_with_base",
+        current_step=None,
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
 
+        # Original SogCLR loss computation
         # compute the logits (similarity between each image-text pair)
         sim = torch.einsum("i d, j d -> i j", image_features, text_features)
+        sim_t2i = sim  # For clarity with the crossmodal implementation
         diag_sim = torch.diagonal(sim)
 
         batch_size = sim.shape[0]
@@ -1340,41 +1351,9 @@ class Scheduled_SogCLR_Loss(nn.Module):
         # E_I(x)*E_T(t_i) - E_I(x_i)*E_T(t_i)
         text_diffs = sim - diag_sim[None, :]
 
-        if per_sample_temp_similarity == "t2i":
-            sim_for_temp = text_features @ image_features.T
-        elif per_sample_temp_similarity == "i2t":
-            sim_for_temp = image_features @ text_features.T
-        elif per_sample_temp_similarity == "t2t":
-            sim_for_temp = text_features @ text_features.T
-        elif per_sample_temp_similarity == "i2i":
-            sim_for_temp = image_features @ image_features.T
-        else:
-            raise ValueError(
-                f"Unknown use_similarity: {per_sample_temp_similarity}. Use t2i, i2t, t2t or i2i"
-            )
-
-        print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
-        if per_sample_temp_mapping == "adaptive_with_base":
-            per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
-                (sim_for_temp + 1.0) / 2.0
-            )
-        elif per_sample_temp_mapping == "adaptive_without_base":
-            per_sample_temperature = (
-                self.alpha * torch.sqrt((sim_for_temp + 1.0) / 2.0) + 1e-9
-            )
-        elif per_sample_temp_mapping == "cosine":
-            min_temperature = self.temperature
-            max_temperature = self.alpha + self.temperature
-            per_sample_temperature = min_temperature + 0.5 * (
-                max_temperature - min_temperature
-            ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_for_temp)))
-        else:
-            raise ValueError(
-                f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
-            )
-
-        image_diffs_d_temps = (image_diffs / per_sample_temperature).clone().detach_()
-        text_diffs_d_temps = (text_diffs / per_sample_temperature).clone().detach_()
+        # Original SogCLR loss logic
+        image_diffs_d_temps = (image_diffs / self.temperature).clone().detach_()
+        text_diffs_d_temps = (text_diffs / self.temperature).clone().detach_()
 
         # update b
         old_b_I = self.b_I[image_ids]
@@ -1432,30 +1411,58 @@ class Scheduled_SogCLR_Loss(nn.Module):
         image_loss = image_loss.mean()
         text_loss = text_loss.mean()
 
-        sogclr_loss = image_loss + text_loss
+        sogclr_total_loss = image_loss + text_loss
 
+        # ====== Add scheduled loss components ======
+        # Compute per-sample temperatures for both directions
+        per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+            (sim_t2i + 1.0) / 2.0
+        )
+
+        per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+            (sim_t2i.t() + 1.0) / 2.0
+        )
+
+        # Compute the per-sample temperature losses
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+        sim_per_sample_t2i_loss = F.cross_entropy(sim_t2i / per_sample_temp_t2i, labels)
+        sim_per_sample_i2t_loss = F.cross_entropy(
+            sim_t2i.t() / per_sample_temp_i2t, labels
+        )
+
+        sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
+
+        # Compute the scheduled weights
         normalized_current_step = current_step / self.total_steps
-        if self.clip_scheduled_loss_type == "quadratic":
-            sogclr_loss_weight = (normalized_current_step - 1.0) ** 2
-            sim_loss_weight = normalized_current_step**2
-        elif self.clip_scheduled_loss_type == "linear":
-            sogclr_loss_weight = 1.0 - normalized_current_step
-            sim_loss_weight = normalized_current_step
-        else:
-            raise ValueError(
-                f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
-            )
+        sogclr_loss_weight = (normalized_current_step - 1.0) ** 2
+        sim_loss_weight = normalized_current_step**2
 
-        # Combine the two losses using a weighted sum
-        total_loss = sogclr_loss_weight * sogclr_loss
+        # Combine the two losses using the scheduled weights
+        total_loss = (
+            sogclr_loss_weight * sogclr_total_loss + sim_loss_weight * sim_total_loss
+        )
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/i2t_loss": image_loss.item(),
+            "train/t2i_loss": text_loss.item(),
+            "train/sim_t2i_loss": sim_per_sample_t2i_loss.item(),
+            "train/sim_i2t_loss": sim_per_sample_i2t_loss.item(),
+            "train/sogclr_loss_weight": sogclr_loss_weight,
+            "train/sim_loss_weight": sim_loss_weight,
+        }
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_i2t, prefix="train/i2t/")
+        )
+
+        log_obj.update(
+            get_temperature_statistics(per_sample_temp_t2i, prefix="train/t2i/")
+        )
 
         if utils.is_main_process():
             wandb.log(
-                {
-                    "train/temperature": self.temperature,
-                    "train/i2t_loss": image_loss.item(),
-                    "train/t2i_loss": text_loss.item(),
-                },
+                log_obj,
                 step=wandb.run.step,
             )
 
