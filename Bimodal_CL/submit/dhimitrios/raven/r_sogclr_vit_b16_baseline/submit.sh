@@ -12,7 +12,7 @@
 #SBATCH --mem=480000
 
 #SBATCH --time=11:59:59
-#SBATCH --array=1-6%1
+#SBATCH --array=1-3%1
 
 module purge
 module load anaconda/3/2023.03
@@ -42,3 +42,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --ita_type sogclr \
     --sogclr_gamma $GAMMA \
     --image_encoder vit_base_patch16_224 \
+    --image_size 224 \
