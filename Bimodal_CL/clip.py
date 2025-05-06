@@ -148,7 +148,7 @@ def train(
 
         expert_image_embedding = batch["expert_image_embedding"]
 
-        if i % 500 == 0:
+        if i % 500 == 0 and i > 0:
             model.eval()
             (
                 val_result_coco,

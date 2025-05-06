@@ -1227,6 +1227,8 @@ class SogCLR_Loss(nn.Module):
         # E_I(x)*E_T(t_i) - E_I(x_i)*E_T(t_i)
         text_diffs = sim - diag_sim[None, :]
 
+        log_obj = {"train/temperature": self.temperature}
+
         if self.use_per_sample_temp:
             # Compute per-sample temperatures
             per_sample_temprature_i2t = self.temperature + self.alpha * torch.sqrt(
@@ -1242,6 +1244,18 @@ class SogCLR_Loss(nn.Module):
             )
             text_diffs_d_temps = (
                 (text_diffs / per_sample_temperature_t2i).clone().detach_()
+            )
+
+            log_obj.update(
+                get_temperature_statistics(
+                    per_sample_temprature_i2t, prefix="train/i2t/"
+                )
+            )
+
+            log_obj.update(
+                get_temperature_statistics(
+                    per_sample_temperature_t2i, prefix="train/t2i/"
+                )
             )
         else:
             image_diffs_d_temps = (image_diffs / self.temperature).clone().detach_()
@@ -1305,13 +1319,16 @@ class SogCLR_Loss(nn.Module):
 
         total_loss = image_loss + text_loss
 
+        log_obj.update(
+            {
+                "train/i2t_loss": image_loss.item(),
+                "train/t2i_loss": text_loss.item(),
+            }
+        )
+
         if utils.is_main_process():
             wandb.log(
-                {
-                    "train/temperature": self.temperature,
-                    "train/i2t_loss": image_loss.item(),
-                    "train/t2i_loss": text_loss.item(),
-                },
+                log_obj,
                 step=wandb.run.step,
             )
 
