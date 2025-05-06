@@ -834,6 +834,7 @@ def main(args):
         sim_based_loss_alpha=args.sim_based_loss_alpha,
         sim_blend_ratio=args.sim_blend_ratio,
         clip_scheduled_loss_type=args.clip_scheduled_loss_type,
+        use_per_sample_temp=args.use_per_sample_temp,
     )
 
     model = model.to(device)
@@ -1726,6 +1727,11 @@ if __name__ == "__main__":
         "--per_sample_temp_mapping",
         default="adaptive_with_base",
         choices=["adaptive_with_base", "adaptive_without_base", "cosine"],
+    )
+
+    parser.add_argument(
+        "--use_per_sample_temp",
+        action="store_true",
     )
 
     # cc3m

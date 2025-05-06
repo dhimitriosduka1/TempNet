@@ -59,6 +59,7 @@ class CLIP(nn.Module):
         sim_blend_ratio=None,
         total_steps=None,
         clip_scheduled_loss_type=None,
+        use_per_sample_temp=False,
     ):
         super().__init__()
 
@@ -122,7 +123,12 @@ class CLIP(nn.Module):
 
         elif self.ita_type == "sogclr":
             self.criterion = SogCLR_Loss(
-                N=N, world_size=world_size, gamma=sogclr_gamma, temperature=self.temp
+                N=N,
+                world_size=world_size,
+                gamma=sogclr_gamma,
+                temperature=self.temp,
+                use_per_sample_temp=use_per_sample_temp,
+                alpha=sim_based_loss_alpha,
             )
 
         elif self.ita_type == "isogclr":
