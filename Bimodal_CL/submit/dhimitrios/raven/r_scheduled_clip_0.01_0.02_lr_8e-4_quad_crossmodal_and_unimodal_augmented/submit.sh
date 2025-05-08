@@ -47,4 +47,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --clip_scheduled_loss_type quadratic \
     --enable_i2i_loss \
     --enable_t2t_loss \
-    --cc3m_extended_captions_path /ptmp/dduka/work/databases/cc3m/train/captions_extended_llm.json \
+    --cc3m_extended_captions_path /ptmp/dduka/work/data/cc3m/training/captions_extended_llm.json \
