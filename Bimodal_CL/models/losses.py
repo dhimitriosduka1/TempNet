@@ -900,6 +900,7 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         alpha=0.1,
         total_steps=None,
         clip_scheduled_loss_type="none",
+        include_unimodal_loss=False,
     ):
         super(Scheduled_Crossmodal_CLIP_Loss, self).__init__()
         self.world_size = world_size
@@ -907,6 +908,7 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         self.alpha = alpha
         self.total_steps = total_steps
         self.clip_scheduled_loss_type = clip_scheduled_loss_type
+        self.include_unimodal_loss = include_unimodal_loss
 
         assert (
             total_steps is not None
@@ -940,7 +942,16 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
 
         clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
-        print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
+        sim_i2i = None
+        sim_t2t = None
+
+        per_sample_temp_i2i = None
+        per_sample_temp_t2t = None
+
+        if self.include_unimodal_loss:
+            sim_i2i = image_features @ image_features.T
+            sim_t2t = text_features @ text_features.T
+
         if per_sample_temp_mapping == "adaptive_with_base":
             per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
                 (sim_t2i + 1.0) / 2.0
@@ -950,10 +961,24 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
                 (sim_t2i.t() + 1.0) / 2.0
             )
 
+            if self.include_unimodal_loss: 
+                per_sample_temp_i2i = self.temperature + self.alpha * torch.sqrt(
+                    (sim_i2i + 1.0) / 2.0
+                )
+
+                per_sample_temp_t2t = self.temperature + self.alpha * torch.sqrt(
+                    (sim_t2t + 1.0) / 2.0
+                )
+
         elif per_sample_temp_mapping == "adaptive_without_base":
             per_sample_temp_t2i = self.alpha * torch.sqrt((sim_t2i + 1.0) / 2.0)
 
             per_sample_temp_i2t = self.alpha * torch.sqrt((sim_t2i.t() + 1.0) / 2.0)
+
+            if self.include_unimodal_loss:
+                per_sample_temp_i2i = self.alpha * torch.sqrt((sim_i2i + 1.0) / 2.0)
+
+                per_sample_temp_t2t = self.alpha * torch.sqrt((sim_t2t + 1.0) / 2.0)
 
         elif per_sample_temp_mapping == "cosine":
             min_temperature = self.temperature
@@ -966,6 +991,16 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
             per_sample_temp_i2t = min_temperature + 0.5 * (
                 max_temperature - min_temperature
             ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_t2i.t())))
+
+            if self.include_unimodal_loss:
+                per_sample_temp_i2i = min_temperature + 0.5 * (
+                    max_temperature - min_temperature
+                ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_i2i)))
+
+                per_sample_temp_t2t = min_temperature + 0.5 * (
+                    max_temperature - min_temperature
+                ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_t2t)))
+
         else:
             raise ValueError(
                 f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base, adaptive_without_base or cosine"
@@ -979,6 +1014,18 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         )
 
         sim_total_loss = (sim_per_sample_i2t_loss + sim_per_sample_t2i_loss) / 2
+
+        if self.include_unimodal_loss:
+            sim_per_sample_i2i_loss = F.cross_entropy(
+                sim_i2i / per_sample_temp_i2i, labels
+            )
+            
+            sim_per_sample_t2t_loss = F.cross_entropy(
+                sim_t2t / per_sample_temp_t2t, labels
+            )
+
+            sim_total_loss += sim_per_sample_i2i_loss
+            sim_total_loss += sim_per_sample_t2t_loss
 
         normalized_current_step = current_step / self.total_steps
 
@@ -1015,6 +1062,18 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         log_obj.update(
             get_temperature_statistics(per_sample_temp_t2i, prefix="train/t2i/")
         )
+
+        if self.include_unimodal_loss:
+            log_obj.update(
+                get_temperature_statistics(per_sample_temp_i2i, prefix="train/i2i/")
+            )
+
+            log_obj.update(
+                get_temperature_statistics(per_sample_temp_t2t, prefix="train/t2t/")
+            )
+
+            log_obj["train/sim_i2i_loss"] = sim_per_sample_i2i_loss.item()
+            log_obj["train/sim_t2t_loss"] = sim_per_sample_t2t_loss.item()
 
         if utils.is_main_process():
             wandb.log(

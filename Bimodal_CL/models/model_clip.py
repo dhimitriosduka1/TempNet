@@ -60,6 +60,7 @@ class CLIP(nn.Module):
         total_steps=None,
         clip_scheduled_loss_type=None,
         use_per_sample_temp=False,
+        include_unimodal_loss=False,
     ):
         super().__init__()
 
@@ -182,6 +183,7 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
                 clip_scheduled_loss_type=clip_scheduled_loss_type,
+                include_unimodal_loss=include_unimodal_loss,
             )
         elif self.ita_type == "clip_moe_text":
             print(f"Using CLIP_MoE_Text_Loss")
@@ -415,7 +417,6 @@ class CLIP(nn.Module):
                 per_sample_temp_mapping=args.per_sample_temp_mapping,
             )
         elif self.ita_type == "scheduled_crossmodal_clip_loss":
-            print(f"Using Scheduled_CLIScheduled_Crossmodal_CLIP_LossP_Loss")
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,

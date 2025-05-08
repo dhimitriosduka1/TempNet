@@ -835,6 +835,7 @@ def main(args):
         sim_blend_ratio=args.sim_blend_ratio,
         clip_scheduled_loss_type=args.clip_scheduled_loss_type,
         use_per_sample_temp=args.use_per_sample_temp,
+        include_unimodal_loss=args.include_unimodal_loss,
     )
 
     model = model.to(device)
@@ -1778,6 +1779,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("--include_alignment_loss", action="store_true")
+    parser.add_argument("--include_unimodal_loss", action="store_true")
 
     args = parser.parse_args()
 
