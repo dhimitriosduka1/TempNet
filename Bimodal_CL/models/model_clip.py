@@ -24,6 +24,7 @@ from models.losses import (
     Scheduled_Crossmodal_With_Augmentations_CLIP_Loss,
     Scheduled_SogCLR_Crossmodal_Loss,
     Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss,
+    Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss,
 )
 
 import torch
@@ -265,9 +266,16 @@ class CLIP(nn.Module):
                     clip_scheduled_loss_type=clip_scheduled_loss_type,
                 )
             )
-        else:
-            raise NotImplementedError
-
+        elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":
+            print("Using Scheduled_SogCLR_Crossmodal_With_Augmentations_Loss")
+            self.criterion = Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss(
+                N=N,
+                world_size=world_size,
+                gamma=sogclr_gamma,
+                temperature=self.temp,
+                alpha=sim_based_loss_alpha,
+                total_steps=total_steps,
+            )
     def forward(
         self,
         image,
@@ -511,6 +519,19 @@ class CLIP(nn.Module):
                 text_features=text_feat,
                 augmented_image_features=augmented_image_feat,
                 augmented_text_features=augmented_text_feat,
+                current_step=current_step,
+            )
+        elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":
+            image_ids = concat_all_gather(idx)
+            text_ids = concat_all_gather(text_idx)
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                augmented_image_features=augmented_image_feat,
+                augmented_text_features=augmented_text_feat,
+                image_ids=image_ids,
+                text_ids=text_ids,
+                epoch=epoch,
                 current_step=current_step,
             )
         else:
