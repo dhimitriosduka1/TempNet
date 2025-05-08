@@ -1646,6 +1646,7 @@ if __name__ == "__main__":
             "scheduled_crossmodal_clip_loss",
             "clip_moe_vision_and_text",
             "scheduled_clip_moe_text",
+            "scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss",
             "scheduled_crossmodal_with_augmentations_clip_loss",
             "scheduled_sogclr_crossmodal",
         ],
@@ -1796,6 +1797,15 @@ if __name__ == "__main__":
         if not args.cc3m_extended_captions_path:
             validation_errors.append(
                 "--cc3m_extended_captions_path must be provided when --enable_t2t_loss is set."
+            )
+
+    if (
+        args.ita_type
+        == "scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss"
+    ):
+        if not args.enable_i2i_loss and not args.enable_t2t_loss:
+            validation_errors.append(
+                "If --ita_type is 'scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss', --enable_i2i_loss and --enable_t2t_loss must be set."
             )
 
     # TODO: Maybe add some more validations here

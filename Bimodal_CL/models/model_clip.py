@@ -23,6 +23,7 @@ from models.losses import (
     Scheduled_CLIP_MoE_Text_Loss,
     Scheduled_Crossmodal_With_Augmentations_CLIP_Loss,
     Scheduled_SogCLR_Crossmodal_Loss,
+    Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss,
 )
 
 import torch
@@ -247,6 +248,22 @@ class CLIP(nn.Module):
                 temperature=self.temp,
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
+            )
+        elif (
+            self.ita_type
+            == "scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss"
+        ):
+            print(
+                "Using Scheduled_Crossmodal_With_Augmentations_And_Unimodal_CLIP_Loss"
+            )
+            self.criterion = (
+                Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(
+                    world_size=world_size,
+                    temperature=self.temp,
+                    alpha=sim_based_loss_alpha,
+                    total_steps=total_steps,
+                    clip_scheduled_loss_type=clip_scheduled_loss_type,
+                )
             )
         else:
             raise NotImplementedError
@@ -483,6 +500,17 @@ class CLIP(nn.Module):
                 image_ids=image_ids,
                 text_ids=text_ids,
                 epoch=epoch,
+                current_step=current_step,
+            )
+        elif (
+            self.ita_type
+            == "scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss"
+        ):
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                augmented_image_features=augmented_image_feat,
+                augmented_text_features=augmented_text_feat,
                 current_step=current_step,
             )
         else:
