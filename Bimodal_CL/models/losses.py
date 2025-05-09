@@ -1350,8 +1350,6 @@ class Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(nn.M
             "train/t2t_temperature": self.t2t_temperature,
             "train/t2i_loss": clip_t2i_loss.item(),
             "train/i2t_loss": clip_i2t_loss.item(),
-            "train/sim_t2i_loss": modulated_t2i_loss.item(),
-            "train/sim_i2t_loss": modulated_i2t_loss.item(),
             "train/clip_loss_weight": info_nce_loss_weight,
             "train/sim_loss_weight": modulated_unimodal_loss_weight,
             "train/i2i_loss_weight": i2i_loss_weight,
