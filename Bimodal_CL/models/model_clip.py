@@ -26,6 +26,7 @@ from models.losses import (
     Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss,
     Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss,
     Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss,
+    SogCLR_With_Cosine_And_Unimodal_Loss,
 )
 
 import torch
@@ -277,13 +278,28 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
             )
-        elif self.ita_type == "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss":
-            print("Using Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss")
-            self.criterion = Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(
-                world_size=world_size,
+        elif (
+            self.ita_type
+            == "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss"
+        ):
+            print(
+                "Using Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss"
+            )
+            self.criterion = (
+                Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(
+                    world_size=world_size,
+                    temperature=self.temp,
+                    total_steps=total_steps,
+                    clip_scheduled_loss_type=clip_scheduled_loss_type,
+                )
+            )
+        elif self.ita_type == "sogclr_with_cosine_and_unimodal_loss":
+            print("Using SogCLR_With_Cosine_And_Unimodal_Loss")
+            self.criterion = SogCLR_With_Cosine_And_Unimodal_Loss(
+                N=N,
+                gamma=sogclr_gamma,
                 temperature=self.temp,
-                total_steps=total_steps,    
-                clip_scheduled_loss_type=clip_scheduled_loss_type,
+                world_size=world_size,
             )
 
     def forward(
@@ -544,7 +560,10 @@ class CLIP(nn.Module):
                 epoch=epoch,
                 current_step=current_step,
             )
-        elif self.ita_type == "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss":
+        elif (
+            self.ita_type
+            == "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss"
+        ):
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,
@@ -554,6 +573,20 @@ class CLIP(nn.Module):
                 i2i_loss_weight=args.i2i_loss_weight,
                 t2t_loss_weight=args.t2t_loss_weight,
                 exclude_modulated_info_nce_loss=args.exclude_modulated_info_nce_loss,
+            )
+        elif self.ita_type == "sogclr_with_cosine_and_unimodal_loss":
+            image_ids = concat_all_gather(idx)
+            text_ids = concat_all_gather(text_idx)
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+                augmented_image_features=augmented_image_feat,
+                augmented_text_features=augmented_text_feat,
+                image_ids=image_ids,
+                text_ids=text_ids,
+                epoch=epoch,
+                i2i_loss_weight=args.i2i_loss_weight,
+                t2t_loss_weight=args.t2t_loss_weight,
             )
         else:
             raise NotImplementedError

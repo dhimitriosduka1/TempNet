@@ -1685,6 +1685,176 @@ class SogCLR_Loss(nn.Module):
         return total_loss
 
 
+class SogCLR_With_Cosine_And_Unimodal_Loss(nn.Module):
+    def __init__(
+        self,
+        N=2900000,
+        gamma=0.1,
+        temperature=0.07,
+        world_size=8,
+        i2i_temperature=0.07,
+        t2t_temperature=0.07,
+    ):
+        super(SogCLR_With_Cosine_And_Unimodal_Loss, self).__init__()
+
+        self.world_size = world_size
+        self.s_I = torch.zeros(N).cuda()
+        self.s_T = torch.zeros(N).cuda()
+        self.b_I = torch.zeros(N).cuda()
+        self.b_T = torch.zeros(N).cuda()
+
+        self.gamma = gamma
+        self.temperature = temperature
+        self.eps = 1e-14
+
+        self.i2i_temperature = i2i_temperature
+        self.t2t_temperature = t2t_temperature
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def set_i2i_temperature(self, i2i_temperature):
+        self.i2i_temperature = i2i_temperature
+
+    def set_t2t_temperature(self, t2t_temperature):
+        self.t2t_temperature = t2t_temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        augmented_image_features,
+        augmented_text_features,
+        image_ids,
+        text_ids,
+        epoch,
+        i2i_loss_weight=1.0,
+        t2t_loss_weight=1.0,
+    ):
+
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+            augmented_image_features = torch.cat(
+                GatherLayer.apply(augmented_image_features), dim=0
+            )
+
+            augmented_text_features = torch.cat(
+                GatherLayer.apply(augmented_text_features), dim=0
+            )
+
+        # compute the logits (similarity between each image-text pair)
+        sim = torch.einsum("i d, j d -> i j", image_features, text_features)
+        diag_sim = torch.diagonal(sim)
+
+        batch_size = sim.shape[0]
+        mask_neg = (1.0 - torch.eye(batch_size)).to(sim.device)
+
+        # E_I(x_i)*E_T(t) - E_I(x_i)*E_T(t_i)
+        image_diffs = sim - diag_sim[:, None]
+        # E_I(x)*E_T(t_i) - E_I(x_i)*E_T(t_i)
+        text_diffs = sim - diag_sim[None, :]
+
+        image_diffs_d_temps = (image_diffs / self.temperature).clone().detach_()
+        text_diffs_d_temps = (text_diffs / self.temperature).clone().detach_()
+
+        # update b
+        old_b_I = self.b_I[image_ids]
+        new_b_I = torch.max(image_diffs_d_temps, old_b_I[:, None].tile(1, batch_size))
+        self.b_I[image_ids] = torch.max(new_b_I, dim=1)[0]
+
+        old_b_T = self.b_T[text_ids]
+        new_b_T = torch.max(text_diffs_d_temps, old_b_T[None, :].tile(batch_size, 1))
+        self.b_T[text_ids] = torch.max(new_b_T, dim=0)[0]
+
+        exp_image_diffs = (
+            torch.exp(image_diffs_d_temps - self.b_I[image_ids][:, None]) * mask_neg
+        )  # -b to avoid exp operation overflow
+        exp_text_diffs = (
+            torch.exp(text_diffs_d_temps - self.b_T[text_ids][None, :]) * mask_neg
+        )
+
+        g_I = torch.sum(exp_image_diffs, dim=1, keepdim=True) / (batch_size - 1)
+        g_T = torch.sum(exp_text_diffs, dim=0, keepdim=True) / (batch_size - 1)
+
+        if epoch == 0:
+            s_I = g_I
+            s_T = g_T
+        else:
+            s_I = (1.0 - self.gamma) * self.s_I[image_ids] * torch.exp(
+                old_b_I - self.b_I[image_ids]
+            ) + self.gamma * g_I.squeeze()
+            s_T = (1.0 - self.gamma) * self.s_T[text_ids] * torch.exp(
+                old_b_T - self.b_T[text_ids]
+            ) + self.gamma * g_T.squeeze()
+            s_I = s_I.reshape(g_I.shape)
+            s_T = s_T.reshape(g_T.shape)
+
+        self.s_I[image_ids] = s_I.squeeze()
+        self.s_T[text_ids] = s_T.squeeze()
+
+        s_I = s_I.clamp(min=self.eps)
+        s_T = s_T.clamp(min=self.eps)
+
+        weights_image = exp_image_diffs / s_I
+        weights_text = exp_text_diffs / s_T
+
+        if torch.any(torch.isnan(weights_image)):
+            assert 0, "weights_image has nan."
+        if torch.any(torch.isnan(weights_text)):
+            assert 0, "weights_text has nan."
+
+        image_loss = torch.sum(weights_image * image_diffs, dim=1, keepdim=True) / (
+            batch_size - 1
+        )
+        text_loss = torch.sum(weights_text * text_diffs, dim=0, keepdim=True) / (
+            batch_size - 1
+        )
+
+        image_loss = image_loss.mean()
+        text_loss = text_loss.mean()
+
+        sogclr_loss = image_loss + text_loss
+
+        # Compute cosine modulated loss
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+        i2i_similarity = image_features @ augmented_image_features.t()
+        t2t_similarity = text_features @ augmented_text_features.t()
+
+        i2i_loss = F.cross_entropy(
+            i2i_similarity / self.i2i_temperature, labels
+        )
+
+        t2t_loss = F.cross_entropy(
+            t2t_similarity / self.t2t_temperature, labels
+        )
+
+        modulated_loss = i2i_loss * i2i_loss_weight + t2t_loss * t2t_loss_weight
+
+        total_loss = sogclr_loss + modulated_loss
+
+        log_obj = {}
+        log_obj.update(
+            {
+                "train/i2t_loss": image_loss.item(),
+                "train/t2i_loss": text_loss.item(),
+                "train/sogclr_loss": sogclr_loss.item(),
+                "train/modulated_loss": modulated_loss.item(),
+                "train/i2i_loss_weight": i2i_loss_weight,
+                "train/t2t_loss_weight": t2t_loss_weight,
+            }
+        )
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
 class Scheduled_SogCLR_Crossmodal_Loss(nn.Module):
     def __init__(
         self,
