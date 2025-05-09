@@ -41,12 +41,13 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_sogclr_cos_0.01_0.05_lr_2e-4_i2i_0.5_t2t_0.2_unimodal_augmented/ \
+    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_sogclr_cos_0.01_0.05_lr_2e-4_i2i_0.5_t2t_0.2_unimodal_augmented/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
     --ita_type $ITA_TYPE \
     --temperature_scheduler cos \
+    --temp $TAU_MIN \
     --tau_min $TAU_MIN \
     --tau_max $TAU_MAX \
     --enable_i2i_loss \

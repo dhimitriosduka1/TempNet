@@ -1841,6 +1841,9 @@ class SogCLR_With_Cosine_And_Unimodal_Loss(nn.Module):
                 "train/modulated_loss": modulated_loss.item(),
                 "train/i2i_loss_weight": i2i_loss_weight,
                 "train/t2t_loss_weight": t2t_loss_weight,
+                "train/i2i_temperature": self.i2i_temperature,
+                "train/t2t_temperature": self.t2t_temperature,
+                "train/temperature": self.temperature,
             }
         )
 
