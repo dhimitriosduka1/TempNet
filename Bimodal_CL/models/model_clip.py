@@ -553,6 +553,7 @@ class CLIP(nn.Module):
                 current_step=current_step,
                 i2i_loss_weight=args.i2i_loss_weight,
                 t2t_loss_weight=args.t2t_loss_weight,
+                exclude_modulated_info_nce_loss=args.exclude_modulated_info_nce_loss,
             )
         else:
             raise NotImplementedError

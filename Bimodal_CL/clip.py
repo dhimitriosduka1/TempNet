@@ -1756,6 +1756,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_t2t_loss", action="store_true")
     parser.add_argument("--i2i_loss_weight", default=1.0, type=float)
     parser.add_argument("--t2t_loss_weight", default=1.0, type=float)
+    parser.add_argument("--exclude_modulated_info_nce_loss", action="store_true")
 
     # SimBasedCLIP loss params
     parser.add_argument("--sim_based_loss_alpha", default=0.1, type=float)

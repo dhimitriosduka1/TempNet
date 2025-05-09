@@ -1273,6 +1273,7 @@ class Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(nn.M
         current_step,
         i2i_loss_weight=1.0,
         t2t_loss_weight=1.0,
+        exclude_modulated_info_nce_loss=False,
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
@@ -1297,16 +1298,19 @@ class Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(nn.M
         info_nce_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
         # We can use the same temperature scheduler for both the crossmodal and unimodal losses
-        modulated_crossmodal_temperature = self.i2i_temperature
+        if not exclude_modulated_info_nce_loss:
+            modulated_crossmodal_temperature = self.i2i_temperature
 
-        modulated_t2i_loss = F.cross_entropy(
-            sim_t2i / modulated_crossmodal_temperature, labels
-        )
-        modulated_i2t_loss = F.cross_entropy(
-            sim_t2i.t() / modulated_crossmodal_temperature, labels
-        )
+            modulated_t2i_loss = F.cross_entropy(
+                sim_t2i / modulated_crossmodal_temperature, labels
+            )
+            modulated_i2t_loss = F.cross_entropy(
+                sim_t2i.t() / modulated_crossmodal_temperature, labels
+            )
 
-        modulated_info_nce_loss = (modulated_t2i_loss + modulated_i2t_loss) / 2.0
+            modulated_info_nce_loss = (modulated_t2i_loss + modulated_i2t_loss) / 2.0
+        else:
+            modulated_info_nce_loss = 0.0
 
         # Next, compute the modulated unimodal loss components based on the original and augmented features
         sim_i2i = image_features @ augmented_image_features.T
