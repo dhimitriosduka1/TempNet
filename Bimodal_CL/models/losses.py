@@ -1234,6 +1234,137 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         return total_loss
 
 
+class Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        temperature=0.01,
+        i2i_temperature=0.01,
+        t2t_temperature=0.01,
+        total_steps=None,
+        clip_scheduled_loss_type="none",
+    ):
+        super(
+            Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss, self
+        ).__init__()
+        self.world_size = world_size
+        self.temperature = temperature
+        self.total_steps = total_steps
+        self.clip_scheduled_loss_type = clip_scheduled_loss_type
+
+        self.i2i_temperature = i2i_temperature
+        self.t2t_temperature = t2t_temperature
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def set_i2i_temperature(self, i2i_temperature):
+        self.i2i_temperature = i2i_temperature
+
+    def set_t2t_temperature(self, t2t_temperature):
+        self.t2t_temperature = t2t_temperature
+
+    def forward(
+        self,
+        image_features,
+        text_features,
+        augmented_image_features,
+        augmented_text_features,
+        current_step,
+        i2i_loss_weight=1.0,
+        t2t_loss_weight=1.0,
+    ):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+            augmented_image_features = torch.cat(
+                GatherLayer.apply(augmented_image_features), dim=0
+            )
+
+            augmented_text_features = torch.cat(
+                GatherLayer.apply(augmented_text_features), dim=0
+            )
+
+        # First, compute normal CLIP loss.
+        sim_t2i = text_features @ image_features.T
+        sim_clip_loss = sim_t2i / self.temperature
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        clip_t2i_loss = F.cross_entropy(sim_clip_loss, labels)
+        clip_i2t_loss = F.cross_entropy(sim_clip_loss.t(), labels)
+
+        info_nce_loss = (clip_i2t_loss + clip_t2i_loss) / 2
+
+        # We can use the same temperature scheduler for both the crossmodal and unimodal losses
+        modulated_crossmodal_temperature = self.i2i_temperature
+
+        modulated_t2i_loss = F.cross_entropy(
+            sim_t2i / modulated_crossmodal_temperature, labels
+        )
+        modulated_i2t_loss = F.cross_entropy(
+            sim_t2i.t() / modulated_crossmodal_temperature, labels
+        )
+
+        modulated_info_nce_loss = (modulated_t2i_loss + modulated_i2t_loss) / 2.0
+
+        # Next, compute the modulated unimodal loss components based on the original and augmented features
+        sim_i2i = image_features @ augmented_image_features.T
+        modulated_i2i_loss = F.cross_entropy(sim_i2i / self.i2i_temperature, labels)
+
+        sim_t2t = text_features @ augmented_text_features.T
+        modulated_t2t_loss = F.cross_entropy(sim_t2t / self.t2t_temperature, labels)
+
+        modulated_unimodal_loss = (
+            i2i_loss_weight * modulated_i2i_loss + t2t_loss_weight * modulated_t2t_loss
+        )
+
+        # Compute the loss weights
+        normalized_current_step = current_step / self.total_steps
+
+        if self.clip_scheduled_loss_type == "quadratic":
+            info_nce_loss_weight = (normalized_current_step - 1.0) ** 2
+            modulated_unimodal_loss_weight = normalized_current_step**2
+        elif self.clip_scheduled_loss_type == "linear":
+            info_nce_loss_weight = 1.0 - normalized_current_step
+            modulated_unimodal_loss_weight = normalized_current_step
+        else:
+            raise ValueError(
+                f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
+            )
+
+        # Combine the two losses using a weighted sum
+        total_loss = (
+            info_nce_loss_weight * info_nce_loss
+            + modulated_unimodal_loss_weight
+            * (modulated_info_nce_loss + modulated_unimodal_loss)
+        )
+
+        log_obj = {
+            "train/temperature": self.temperature,
+            "train/i2i_temperature": self.i2i_temperature,
+            "train/t2t_temperature": self.t2t_temperature,
+            "train/t2i_loss": clip_t2i_loss.item(),
+            "train/i2t_loss": clip_i2t_loss.item(),
+            "train/sim_t2i_loss": modulated_t2i_loss.item(),
+            "train/sim_i2t_loss": modulated_i2t_loss.item(),
+            "train/sim_i2i_loss": modulated_i2i_loss.item(),
+            "train/sim_t2t_loss": modulated_t2t_loss.item(),
+            "train/clip_loss_weight": info_nce_loss_weight,
+            "train/sim_loss_weight": modulated_unimodal_loss_weight,
+            "train/i2i_loss_weight": i2i_loss_weight,
+            "train/t2t_loss_weight": t2t_loss_weight,
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
+
+        return total_loss
+
+
 class Scheduled_Crossmodal_With_Augmentations_CLIP_Loss(nn.Module):
     def __init__(
         self,

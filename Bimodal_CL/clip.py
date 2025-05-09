@@ -1650,6 +1650,7 @@ if __name__ == "__main__":
             "scheduled_crossmodal_with_augmentations_clip_loss",
             "scheduled_sogclr_crossmodal",
             "scheduled_sogclr_crossmodal_with_augmentations",
+            "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
