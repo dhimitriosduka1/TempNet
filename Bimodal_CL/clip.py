@@ -209,7 +209,7 @@ def train(
                 # Use cos temperature schduler if enabled
                 global_it = epoch * data_loader.batches_per_epoch + i
 
-                if args.temperature_scheduler in ["cos", "cos_aug"]:
+                if args.temperature_scheduler in ["cos", "cos_aug", "fixed"]:
                     # Get next temperature
                     updated_temperature = get_next_temperature(
                         tau_min=args.tau_min,
@@ -229,6 +229,11 @@ def train(
                         # I'm only interested in i2i and t2t losses being affected from the cosine scheduler when the cos_aug is used.
                         model.module.criterion.set_i2i_temperature(updated_temperature)
                         model.module.criterion.set_t2t_temperature(updated_temperature)
+
+                    elif args.temperature_scheduler == "fixed":
+                        model.module.criterion.set_temperature(args.temp)
+                        model.module.criterion.set_i2i_temperature(args.temp)
+                        model.module.criterion.set_t2t_temperature(args.temp)
 
                     else:
                         raise ValueError(
@@ -1715,7 +1720,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temperature_scheduler",
         default="none",
-        choices=["none", "cos", "cosPCT", "cos_aug"],
+        choices=["none", "cos", "cosPCT", "cos_aug", "fixed"],
     )
     parser.add_argument("--tau_min", default=0.01, type=float)
     parser.add_argument("--tau_max", default=0.02, type=float)
