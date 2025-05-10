@@ -59,6 +59,8 @@ from dataset.cc3m_wds import (
 from scheduler.temperature_scheduler import get_next_temperature
 from global_step import GlobalStep
 
+import traceback
+
 # =================== Loading configuration files based on the env ========================
 
 from env_config.config_manager import ConfigManager
@@ -257,13 +259,19 @@ def train(
                 )
 
                 if utils.is_main_process():
-                    wandb.log(
-                        {
-                            "train/loss": loss_term,
-                            "train/lr": optimizer.param_groups[0]["lr"],
-                        },
-                        step=GlobalStep.get(),
-                    )
+                    log_obj = {
+                        "train/loss": loss_term,
+                        "train/lr": optimizer.param_groups[0]["lr"],
+                    }
+                    
+                    if args.ita_type == "isogclr_tempnet":
+                        clip_loss = loss_term[0]
+                        temp_loss = loss_term[1]
+
+                        log_obj["train/loss"] = clip_loss
+                        log_obj["train/temp_loss"] = temp_loss
+                    
+                    wandb.log(log_obj, step=GlobalStep.get())
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
@@ -1862,6 +1870,7 @@ if __name__ == "__main__":
         main(args)
     except Exception as e:
         wandb.alert(title="Training Failed", text=str(e))  # Send an alert if enabled
+        print(traceback.format_exc())
         print(f"Error occurred: {e}")
     finally:
         wandb.finish()  # Ensure W&B run is properly closed

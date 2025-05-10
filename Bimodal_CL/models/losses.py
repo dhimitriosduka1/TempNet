@@ -61,6 +61,14 @@ def get_temperature_statistics(per_sample_temperature, prefix="train/"):
         f"{prefix}negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
     }
 
+def get_temperature_statistics_1d(per_sample_temperature, prefix="train/"):
+    return {
+        f"{prefix}min_temperature": per_sample_temperature.min().item(),
+        f"{prefix}max_temperature": per_sample_temperature.max().item(),
+        f"{prefix}avg_temperature": per_sample_temperature.mean().item(),
+        f"{prefix}median_temperature": per_sample_temperature.median().item(),
+        f"{prefix}quantile_0.5_temperature": per_sample_temperature.float().quantile(0.5).item(),
+    }
 
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
@@ -2515,6 +2523,14 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         temp_text_loss = torch.mean(temp_weight_text * tau_text[None, :])
 
         temp_loss = temp_image_loss + temp_text_loss
+
+        log_obj = {}
+
+        log_obj.update(get_temperature_statistics_1d(tau_image, prefix="train/image/"))
+        log_obj.update(get_temperature_statistics_1d(tau_text, prefix="train/text/"))
+
+        if utils.is_main_process():
+            wandb.log(log_obj, step=wandb.run.step)
 
         return (
             (clip_loss, temp_loss),
