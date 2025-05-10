@@ -24,7 +24,7 @@ export mpcdf=1
 PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=8 --master_port=4820 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --run_name iSogCLR_TempNet_Baseline \
     --data_path /ptmp/dduka/work/data/ \
