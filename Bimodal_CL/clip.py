@@ -994,8 +994,8 @@ def main(args):
                 )
                 text_embeds = model.text_proj(text_output.last_hidden_state[:, 0, :])
 
-                model.criterion.image_temp_gen._init_prototypes(text_embeds[:256, :])
-                model.criterion.text_temp_gen._init_prototypes(image_embeds[:256, :])
+                model.criterion.image_temp_gen._init_prototypes(text_embeds[:args.batch_size_train, :])
+                model.criterion.text_temp_gen._init_prototypes(image_embeds[:args.batch_size_train, :])
 
     if args.vis_prototypes:
         model.eval()
