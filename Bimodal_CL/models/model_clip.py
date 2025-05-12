@@ -27,6 +27,7 @@ from models.losses import (
     Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss,
     Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss,
     SogCLR_With_Cosine_And_Unimodal_Loss,
+    CLIP_with_TempNet_Loss,
 )
 
 import torch
@@ -301,6 +302,15 @@ class CLIP(nn.Module):
                 temperature=self.temp,
                 world_size=world_size,
             )
+        elif self.ita_type == "clip_with_tempnet":
+            print("Using CLIP_with_TempNet_Loss")
+            self.criterion = CLIP_with_TempNet_Loss(
+                world_size=world_size,
+                feature_dim=embed_dim,
+                rho=rho,
+            )
+        else:
+            raise NotImplementedError
 
     def forward(
         self,
@@ -587,6 +597,11 @@ class CLIP(nn.Module):
                 epoch=epoch,
                 i2i_loss_weight=args.i2i_loss_weight,
                 t2t_loss_weight=args.t2t_loss_weight,
+            )
+        elif self.ita_type == "clip_with_tempnet":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
             )
         else:
             raise NotImplementedError

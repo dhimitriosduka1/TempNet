@@ -61,14 +61,18 @@ def get_temperature_statistics(per_sample_temperature, prefix="train/"):
         f"{prefix}negative_samples_quantile_0.5_temperature": negative_samples_quantile_0_5_temperature,
     }
 
+
 def get_temperature_statistics_1d(per_sample_temperature, prefix="train/"):
     return {
         f"{prefix}min_temperature": per_sample_temperature.min().item(),
         f"{prefix}max_temperature": per_sample_temperature.max().item(),
         f"{prefix}avg_temperature": per_sample_temperature.mean().item(),
         f"{prefix}median_temperature": per_sample_temperature.median().item(),
-        f"{prefix}quantile_0.5_temperature": per_sample_temperature.float().quantile(0.5).item(),
+        f"{prefix}quantile_0.5_temperature": per_sample_temperature.float()
+        .quantile(0.5)
+        .item(),
     }
+
 
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
@@ -209,6 +213,65 @@ class CLIP_Loss(nn.Module):
                     log_obj,
                     step=wandb.run.step,
                 )
+
+        return total_loss
+
+
+class CLIP_with_TempNet_Loss(nn.Module):
+
+    def __init__(
+        self,
+        world_size=8,
+        feature_dim=256,
+        rho=7.0,
+    ):
+        super(CLIP_with_TempNet_Loss, self).__init__()
+        self.world_size = world_size
+        self.feature_dim = feature_dim
+        self.rho = rho
+
+        self.image_temp_gen = TempGenerator(
+            feature_dim=feature_dim, rho=self.rho
+        ).cuda()
+
+        self.text_temp_gen = TempGenerator(feature_dim=feature_dim, rho=self.rho).cuda()
+
+    def set_temperature(self, temperature):
+        self.temperature = temperature
+
+    def set_i2i_temperature(self, i2i_temperature):
+        pass
+
+    def set_t2t_temperature(self, t2t_temperature):
+        pass
+
+    def forward(self, image_features, text_features):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+        # generate temperatures
+        tau_image = self.image_temp_gen(image_features.detach())
+        tau_text = self.text_temp_gen(text_features.detach())
+
+        sim = torch.einsum("i d, j d -> i j", text_features, image_features)
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        i2t_loss = F.cross_entropy(sim.t() / tau_image, labels)
+        t2i_loss = F.cross_entropy(sim / tau_text, labels)
+
+        total_loss = (i2t_loss + t2i_loss) / 2
+
+        log_obj = {
+            "train/t2i_loss": t2i_loss.item(),
+            "train/i2t_loss": i2t_loss.item(),
+        }
+
+        if utils.is_main_process():
+            wandb.log(
+                log_obj,
+                step=wandb.run.step,
+            )
 
         return total_loss
 
@@ -1828,13 +1891,9 @@ class SogCLR_With_Cosine_And_Unimodal_Loss(nn.Module):
         i2i_similarity = image_features @ augmented_image_features.t()
         t2t_similarity = text_features @ augmented_text_features.t()
 
-        i2i_loss = F.cross_entropy(
-            i2i_similarity / self.i2i_temperature, labels
-        )
+        i2i_loss = F.cross_entropy(i2i_similarity / self.i2i_temperature, labels)
 
-        t2t_loss = F.cross_entropy(
-            t2t_similarity / self.t2t_temperature, labels
-        )
+        t2t_loss = F.cross_entropy(t2t_similarity / self.t2t_temperature, labels)
 
         modulated_loss = i2i_loss * i2i_loss_weight + t2t_loss * t2t_loss_weight
 
