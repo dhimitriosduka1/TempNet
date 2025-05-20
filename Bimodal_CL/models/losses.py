@@ -1197,6 +1197,8 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         augmented_image_features,
         augmented_text_features,
         current_step,
+        clip_loss_weight,
+        sim_loss_weight,
     ):
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
@@ -1262,6 +1264,13 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         elif self.clip_scheduled_loss_type == "linear":
             info_nce_loss_weight = 1.0 - normalized_current_step
             modulated_unimodal_loss_weight = normalized_current_step
+        elif self.clip_scheduled_loss_type == "fixed":
+            assert (
+                clip_loss_weight is not None and sim_loss_weight is not None
+            ), "clip_loss_weight and sim_loss_weight must be provided for `fixed` scheduled loss"
+
+            info_nce_loss_weight = clip_loss_weight
+            modulated_unimodal_loss_weight = sim_loss_weight
         else:
             raise ValueError(
                 f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"

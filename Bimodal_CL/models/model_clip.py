@@ -558,6 +558,8 @@ class CLIP(nn.Module):
                 augmented_image_features=augmented_image_feat,
                 augmented_text_features=augmented_text_feat,
                 current_step=current_step,
+                clip_loss_weight=args.clip_loss_weight,
+                sim_loss_weight=args.sim_loss_weight,
             )
         elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":
             image_ids = concat_all_gather(idx)
