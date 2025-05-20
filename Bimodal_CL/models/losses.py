@@ -997,6 +997,8 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         image_features,
         text_features,
         current_step,
+        clip_loss_weight,
+        sim_loss_weight,
         per_sample_temp_mapping="adaptive_with_base",
     ):
         if self.world_size > 1:
@@ -1106,6 +1108,10 @@ class Scheduled_Crossmodal_CLIP_Loss(nn.Module):
         elif self.clip_scheduled_loss_type == "linear":
             clip_loss_weight = 1.0 - normalized_current_step
             sim_loss_weight = normalized_current_step
+        elif self.clip_scheduled_loss_type == "fixed":
+            assert (
+                clip_loss_weight is not None and sim_loss_weight is not None
+            ), "clip_loss_weight and sim_loss_weight must be provided for `fixed` scheduled loss"
         else:
             raise ValueError(
                 f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"

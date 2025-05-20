@@ -1779,7 +1779,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--clip_scheduled_loss_type",
         default="none",
-        choices=["none", "linear", "quadratic"],
+        choices=["none", "linear", "quadratic", "fixed"],
     )
 
     # Experts
@@ -1798,6 +1798,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--include_alignment_loss", action="store_true")
     parser.add_argument("--include_unimodal_loss", action="store_true")
+
+    parser.add_argument("--clip_loss_weight", type=float)
+    parser.add_argument("--sim_loss_weight", type=float)
 
     args = parser.parse_args()
 
