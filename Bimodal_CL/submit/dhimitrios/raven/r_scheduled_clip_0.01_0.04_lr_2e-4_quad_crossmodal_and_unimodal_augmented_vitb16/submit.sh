@@ -8,7 +8,7 @@
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
 
-#SBATCH --gres=gpu:4
+#SBATCH --gres=gpu:8
 #SBATCH --mem=480000
 
 #SBATCH --time=11:59:59
@@ -50,3 +50,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --cc3m_extended_captions_path /ptmp/dduka/work/data/cc3m/training/captions_extended_llm.json \
     --image_encoder vit_base_patch16_224 \
     --image_res 224 \
+    --batch_size_train 256
