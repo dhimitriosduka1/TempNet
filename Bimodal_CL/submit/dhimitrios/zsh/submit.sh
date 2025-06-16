@@ -39,6 +39,6 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
             --zs_dataset $DATASET \
             --ita_type clip \
             --checkpoint $MODEL_PATH \
-            --zsh_eval \
+            --zsh_eval
     done
 done
