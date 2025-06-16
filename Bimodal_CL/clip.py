@@ -417,7 +417,7 @@ def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
 
     text_embeddings = []
     for c in classes:
-        texts = [template(c) for template in templates]
+        texts = [template.format(c) for template in templates]
         text_inputs = tokenizer(
             texts,
             padding="max_length",
@@ -812,11 +812,11 @@ def main(args):
 
     #### Zero-shot transfer ####
     # DD
-    # zeroshot_dataloader = create_zeroshot_dataloader(
-    #     dataset_name=args.zs_dataset,
-    #     data_folder=args.zs_datafolder,
-    #     image_size=args.image_res,
-    # )
+    zeroshot_dataloader = create_zeroshot_dataloader(
+        dataset_name=args.zs_dataset,
+        data_folder=args.zs_datafolder,
+        image_size=args.image_res,
+    )
 
     #### Model ####
     print("Creating model")
@@ -1340,6 +1340,15 @@ def main(args):
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
+    if args.zsh_eval:
+        zsh_results = zeroshot_transfer(model_without_ddp, zeroshot_dataloader, args.zs_dataset, tokenizer, device)
+        print("finished zeroshot transfer")
+        print(zsh_results)
+
+        wandb.log({"zsh_results": zsh_results})
+        wandb.finish()
+        exit()
+
     print("Start training")
     start_time = time.time()
 
@@ -1801,6 +1810,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--clip_loss_weight", type=float)
     parser.add_argument("--sim_loss_weight", type=float)
+
+    parser.add_argument("--zsh_eval", action="store_true")
 
     args = parser.parse_args()
 
