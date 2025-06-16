@@ -814,9 +814,12 @@ def main(args):
     #### Zero-shot transfer ####
     # DD
     print(f"===> Creating zeroshot dataloader for {args.zs_dataset}")
+
+    zs_dataset = args.zs_dataset
+
     zeroshot_dataloader = create_zeroshot_dataloader(
-        dataset_name=args.zs_dataset,
-        data_folder=args.zs_datafolder,
+        dataset_name=zs_dataset,
+        data_folder=zs_dataset,
         image_size=args.image_res,
     )
 
@@ -1343,7 +1346,7 @@ def main(args):
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
     if args.zsh_eval:
-        zsh_results = zeroshot_transfer(model_without_ddp, zeroshot_dataloader, args.zs_dataset, tokenizer, device)
+        zsh_results = zeroshot_transfer(model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device)
         print("finished zeroshot transfer")
         print(zsh_results)
 
