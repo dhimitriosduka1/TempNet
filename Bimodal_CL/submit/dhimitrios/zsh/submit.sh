@@ -18,9 +18,34 @@ export mpcdf=1
 PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
+# CLIP Baseline
+# Cos Baseline
+# M-I2I
+# M-T2T
+# M-I2T
+# M-T2I
+# Text Expert
+# Vision Expert
+# Vision and Text Expert
+# CLIP Baseline with I2I
+# CLIP Baseline with T2T
+# CLIP Baseline with I2I and T2T
+# TeMo Baseline
+
 DATASETS=(cifar10 cifar100)
 MODEL_PATHS=(
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
+    /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.02_lr_8e-4_quad_i2i/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.02_lr_8e-4_quad_t2t/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_quad_crossmodal_with_augmentations/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.02_lr_8e-4_quad/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.4
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_vision_weight_0.6_dinov2_small/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_vision_weight_0.1_dinov2_large_txt_weight_0.1
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_tau_0.01_lr_8e-4_i2i_0.2/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_tau_0.01_lr_8e-4_t2t_0.2/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_tau_0.01_lr_2e-4_i2i_0.2_t2t_0.2/checkpoint_best.pth
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_2e-4_quad_crossmodal_and_unimodal_augmented/checkpoint_best.pth
 )
 

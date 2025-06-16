@@ -1350,6 +1350,11 @@ def main(args):
         print("finished zeroshot transfer")
         print(zsh_results)
 
+        # Write also to a file in a directory called zsh_results
+        os.makedirs("zsh_results", exist_ok=True)
+        with open(f"zsh_results/{args.run_name}.json", "w") as f:
+            json.dump(zsh_results, f)
+
         wandb.log({"zsh_results": zsh_results})
         wandb.finish()
         exit()
