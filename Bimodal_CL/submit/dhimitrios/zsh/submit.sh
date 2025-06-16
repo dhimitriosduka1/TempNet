@@ -37,8 +37,8 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
             --init_model \
             --use_amp \
             --zsh_eval \
-            --zs_dataset "$DATASET" \
+            --zs_dataset $DATASET \
             --ita_type clip \
-            --checkpoint "$MODEL_PATH"
+            --checkpoint $MODEL_PATH
     done
 done
