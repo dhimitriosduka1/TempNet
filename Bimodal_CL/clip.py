@@ -812,6 +812,7 @@ def main(args):
 
     #### Zero-shot transfer ####
     # DD
+    print(f"===> Creating zeroshot dataloader for {args.zs_dataset}")
     zeroshot_dataloader = create_zeroshot_dataloader(
         dataset_name=args.zs_dataset,
         data_folder=args.zs_datafolder,

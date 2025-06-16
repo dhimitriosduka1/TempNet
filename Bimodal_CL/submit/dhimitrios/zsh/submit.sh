@@ -36,9 +36,9 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
             --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/$DESC/ \
             --init_model \
             --use_amp \
-            --zsh_eval \
             --zs_dataset $DATASET \
             --ita_type clip \
-            --checkpoint $MODEL_PATH
+            --checkpoint $MODEL_PATH \
+            --zsh_eval \
     done
 done
