@@ -412,6 +412,7 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size):
 def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
     model.eval()
 
+    print(f"===> Loading zeroshot transfer config for {dataset_name}")
     config = eval(open(f"zeroshot_transfer/{dataset_name}_classes.py", "r").read())
     classes, templates = config["classes"], config["templates"]
 
