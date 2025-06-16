@@ -28,14 +28,15 @@ cd "${PROJECT_DIR}"
 # Vision Expert
 # Vision and Text Expert
 # CLIP Baseline with I2I
-# CLIP Baseline with T2T
+# CLIP Baseline with T2T 
 # CLIP Baseline with I2I and T2T
 # TeMo Baseline
+
+# /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth # Cos Baseline Not Yet Submitted
 
 DATASETS=(cifar10 cifar100)
 MODEL_PATHS=(
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
-    /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.02_lr_8e-4_quad_i2i/checkpoint_best.pth
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.02_lr_8e-4_quad_t2t/checkpoint_best.pth
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_quad_crossmodal_with_augmentations/checkpoint_best.pth
