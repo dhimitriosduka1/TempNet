@@ -816,12 +816,14 @@ def main(args):
     print(f"===> Creating zeroshot dataloader for {args.zs_dataset}")
 
     zs_dataset = args.zs_dataset
-
-    zeroshot_dataloader = create_zeroshot_dataloader(
-        dataset_name=zs_dataset,
-        data_folder=zs_dataset,
-        image_size=args.image_res,
-    )
+    zeroshot_dataloader = None
+    
+    if args.zsh_eval:
+        zeroshot_dataloader = create_zeroshot_dataloader(
+            dataset_name=zs_dataset,
+            data_folder=zs_dataset,
+            image_size=args.image_res,
+        )
 
     #### Model ####
     print("Creating model")
