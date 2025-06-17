@@ -36,7 +36,7 @@ cd "${PROJECT_DIR}"
 
 DATASETS=(cifar10 cifar100)
 MODEL_PATHS=(
-    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_txt_weight_0.4/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_moe_tau_0.01_0.04_lr_8e-4_vision_weight_0.1_dinov2_large_txt_weight_0.1/checkpoint_best.pth
 )
 
 for MODEL_PATH in "${MODEL_PATHS[@]}"; do
