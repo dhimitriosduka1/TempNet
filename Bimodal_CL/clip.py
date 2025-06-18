@@ -817,8 +817,10 @@ def main(args):
 
     zs_dataset = args.zs_dataset
     zeroshot_dataloader = None
+
+    zsh_eval = args.zsh_eval    
     
-    if args.zsh_eval:
+    if zsh_eval:
         zeroshot_dataloader = create_zeroshot_dataloader(
             dataset_name=zs_dataset,
             data_folder=zs_dataset,
@@ -1347,7 +1349,7 @@ def main(args):
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
-    if args.zsh_eval:
+    if zsh_eval:
         zsh_results = zeroshot_transfer(model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device)
         print("finished zeroshot transfer")
         print(zsh_results)
