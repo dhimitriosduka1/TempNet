@@ -1,0 +1,8 @@
+{
+    "data_path": "/ptmp/dduka/work/data/",
+    "cc3m_ann_file": "/ptmp/dduka/work/data/cc3m/validation/annotations.json",
+    "cc3m_img2cls_file": "/ptmp/dduka/work/data/cc3m/validation/cc3m_validation_key_class_mapping_18.pkl",
+    "cc3m_val_root": "/ptmp/dduka/work/data/cc3m/validation/extracted/",
+    "captions_path": "/ptmp/dduka/work/data/cc3m/training/captions.json",
+    "vision_embeddings_base_path": "/ptmp/dduka/work/data/cc3m/training_features_dinov2/"
+}
