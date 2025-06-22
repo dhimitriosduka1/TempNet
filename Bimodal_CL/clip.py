@@ -56,6 +56,18 @@ from sklearn.preprocessing import StandardScaler
 
 # import umap
 
+# Dataset size
+from dataset.cc3m_wds import (
+    make_dataloader_train,
+    get_train_dataset_size,
+    get_val_dataset_size,
+)
+
+
+from env_config.config_manager import ConfigManager
+
+cm = ConfigManager()
+
 
 def train(
     model,
@@ -118,9 +130,11 @@ def train(
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
-    for i, (image, text, idx, text_idx) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
-    ):
+    for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+        image = batch["image"]
+        text = batch["caption"]
+        idx = batch["idx"]
+        text_idx = batch["text_idx"]
 
         if optimizer_tempnet is not None:
             optimizer_tempnet.param_groups[0]["lr"] = (
@@ -492,7 +506,8 @@ def main(args):
     else:
         train_dataset = create_train_dataset("imagenet100", args)
 
-    args.data_number = len(train_dataset)
+    # args.data_number = len(train_dataset)
+    args.data_number = get_train_dataset_size()
 
     val_coco_dataset, test_coco_dataset = create_val_dataset(
         "re", args, args.val_coco_file, args.coco_image_root, args.test_coco_file
@@ -500,11 +515,12 @@ def main(args):
     val_flickr_dataset, test_flickr_dataset = create_val_dataset(
         "re", args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file
     )
-    sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
+
+    # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
-    print("len of sbu data:", len(sbu_dataset))
+    # print("len of sbu data:", len(sbu_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -521,40 +537,61 @@ def main(args):
 
         assert 0
 
-    num_training = int(args.train_frac * len(train_dataset))
-    train_dataset = Subset(train_dataset, list(range(num_training)))
+    # num_training = int(args.train_frac * len(train_dataset))
+    # train_dataset = Subset(train_dataset, list(range(num_training)))
 
-    if args.distributed:
-        num_tasks = utils.get_world_size()
-        global_rank = utils.get_rank()
-        samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [
-            None,
-            None,
-        ]
-    else:
-        samplers = [None, None, None]
+    # if args.distributed:
+    #     num_tasks = utils.get_world_size()
+    #     global_rank = utils.get_rank()
+    #     samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [
+    #         None,
+    #         None,
+    #     ]
+    # else:
+    #     samplers = [None, None, None]
 
-    train_loader = create_train_loader(
-        train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
+    # train_loader = create_train_loader(
+    #     train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
+    # )
+
+    train_loader = make_dataloader_train(
+        trainset=train_dataset, batch_size=args.batch_size_train, num_workers=8
     )
+
+    # val_coco_loader, test_coco_loader = create_val_loader(
+    #     [val_coco_dataset, test_coco_dataset],
+    #     samplers[1:],
+    #     [args.batch_size_test] * 2,
+    #     [8] * 2,
+    #     [None] * 2,
+    # )
+    # val_flickr_loader, test_flickr_loader = create_val_loader(
+    #     [val_flickr_dataset, test_flickr_dataset],
+    #     samplers[1:],
+    #     [args.batch_size_test] * 2,
+    #     [8] * 2,
+    #     [None] * 2,
+    # )
 
     val_coco_loader, test_coco_loader = create_val_loader(
         [val_coco_dataset, test_coco_dataset],
-        samplers[1:],
+        [None, None],
         [args.batch_size_test] * 2,
         [8] * 2,
         [None] * 2,
     )
+
     val_flickr_loader, test_flickr_loader = create_val_loader(
         [val_flickr_dataset, test_flickr_dataset],
-        samplers[1:],
+        [None, None],
         [args.batch_size_test] * 2,
         [8] * 2,
         [None] * 2,
     )
-    sbu_loader = create_val_loader(
-        [sbu_dataset], [None], [args.batch_size_test], [32], [None]
-    )[0]
+
+    # sbu_loader = create_val_loader(
+    #     [sbu_dataset], [None], [args.batch_size_test], [32], [None]
+    # )[0]
 
     if args.text_encoder == "roberta-large":
         tokenizer = RobertaTokenizer.from_pretrained(
@@ -565,12 +602,12 @@ def main(args):
             args.text_encoder, local_files_only=True
         )
 
-    #### Zero-shot transfer ####
-    zeroshot_dataloader = create_zeroshot_dataloader(
-        dataset_name=args.zs_dataset,
-        data_folder=args.zs_datafolder,
-        image_size=args.image_res,
-    )
+    # #### Zero-shot transfer ####
+    # zeroshot_dataloader = create_zeroshot_dataloader(
+    #     dataset_name=args.zs_dataset,
+    #     data_folder=args.zs_datafolder,
+    #     image_size=args.image_res,
+    # )
 
     #### Model ####
     print("Creating model")
@@ -689,9 +726,14 @@ def main(args):
         # pass
         if args.ita_type == "isogclr_tempnet":
             with torch.no_grad():
-                image, text, _, _ = next(iter(train_loader))
 
-                image = image.to(device)
+                batch = next(iter(train_loader))
+
+                image = batch["image"].to(device, non_blocking=True)
+                text = batch["caption"]
+                idx = batch["idx"].to(device, non_blocking=True)
+                text_idx = batch["text_idx"].to(device, non_blocking=True)
+
                 image_embeds = model.vision_proj(model.visual_encoder(image))
 
                 text = tokenizer(
@@ -701,11 +743,13 @@ def main(args):
                     max_length=30,
                     return_tensors="pt",
                 ).to(device)
+
                 text_output = model.text_encoder(
                     text.input_ids,
                     attention_mask=text.attention_mask,
                     output_hidden_states=False,
                 )
+                
                 text_embeds = model.text_proj(text_output.last_hidden_state[:, 0, :])
 
                 model.criterion.image_temp_gen._init_prototypes(text_embeds[:256, :])
@@ -1001,8 +1045,9 @@ def main(args):
     start_time = time.time()
     for epoch in range(0, max_epoch):
         if not args.evaluate:
-            if args.distributed:
-                train_loader.sampler.set_epoch(epoch)
+            # if args.distributed:
+            #     train_loader.sampler.set_epoch(epoch)
+            
             train_stats = train(
                 model,
                 train_loader,
@@ -1032,14 +1077,14 @@ def main(args):
             model_without_ddp, test_flickr_loader, tokenizer, device, args
         )
 
-        if args.evaluate:
-            zeroshot_results = zeroshot_transfer(
-                model_without_ddp,
-                zeroshot_dataloader,
-                args.zs_dataset,
-                tokenizer,
-                device,
-            )
+        # if args.evaluate:
+        #     zeroshot_results = zeroshot_transfer(
+        #         model_without_ddp,
+        #         zeroshot_dataloader,
+        #         args.zs_dataset,
+        #         tokenizer,
+        #         device,
+        #     )
 
         if utils.is_main_process():
 
@@ -1108,13 +1153,13 @@ def main(args):
                 with open(os.path.join(args.output_dir, "flickr_log.txt"), "a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
-                with open(
-                    os.path.join(
-                        args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
-                    ),
-                    "a",
-                ) as f:
-                    f.write(json.dumps(zeroshot_results) + "\n")
+                # with open(
+                #     os.path.join(
+                #         args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
+                #     ),
+                #     "a",
+                # ) as f:
+                #     f.write(json.dumps(zeroshot_results) + "\n")
 
             else:
                 log_stats = {
@@ -1173,9 +1218,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100"]
     )
-    parser.add_argument("--data_path", default="/data/xxx/VLP")
-    parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
-    parser.add_argument("--train_image_root", default="cc3m")
+    parser.add_argument("--data_path", default=cm.get_config_for("data_path"))
+    # parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
+    # parser.add_argument("--train_image_root", default="cc3m")
 
     # model config
     parser.add_argument("--bert_config", default="configs/config_bert.json")
@@ -1267,10 +1312,10 @@ if __name__ == "__main__":
     parser.add_argument("--vis_prototypes", action="store_true")
 
     # zero-shot transfer
-    parser.add_argument(
-        "--zs_dataset", required=True, choices=["cifar10", "cifar100", "imagenet"]
-    )
-    parser.add_argument("--zs_datafolder", default="./datasets", type=str)
+    # parser.add_argument(
+    #     "--zs_dataset", required=True, choices=["cifar10", "cifar100", "imagenet"]
+    # )
+    # parser.add_argument("--zs_datafolder", default="./datasets", type=str)
 
     # arguments for bilevel tempnet
     parser.add_argument("--proto_std", default=10.0, type=float)
@@ -1285,13 +1330,16 @@ if __name__ == "__main__":
     parser.add_argument("--find_clusters", action="store_true")
     parser.add_argument("--num_clusters", default=256, type=int)
 
+    # cc3m
+    parser.add_argument("--captions_path", default=cm.get_config_for("captions_path"))
+
     args = parser.parse_args()
 
     if args.check_samples_tau:
         args.evaluate = True
 
-    args.train_file = os.path.join(args.data_path, args.train_file)
-    args.train_image_root = os.path.join(args.data_path, args.train_image_root)
+    # args.train_file = os.path.join(args.data_path, args.train_file)
+    # args.train_image_root = os.path.join(args.data_path, args.train_image_root)
 
     args.val_coco_file = os.path.join(args.data_path, "clip_train/coco_val_new.json")
     args.test_coco_file = os.path.join(args.data_path, "clip_train/coco_test_new.json")
@@ -1302,8 +1350,11 @@ if __name__ == "__main__":
     )
     args.flickr_image_root = os.path.join(args.data_path, "flickr30k")
 
-    args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
-    args.sbu_image_root = os.path.join(args.data_path, "sbu")
+    # args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
+    # args.sbu_image_root = os.path.join(args.data_path, "sbu")
+
+    args.cc3m_train_base_path = os.path.join(args.data_path, "cc3m/training/")
+    args.cc3m_val_base_path = os.path.join(args.data_path, "cc3m/validation/")
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 

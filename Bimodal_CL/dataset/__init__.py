@@ -10,6 +10,7 @@ from dataset.caption_dataset import (
     ImageNet100Dataset,
 )
 from dataset.randaugment import RandomAugment
+from dataset.cc3m_wds import make_dataset_train
 
 
 class GaussianBlur(object):
@@ -69,37 +70,7 @@ def create_train_dataset(dataset, args, use_test_transform=False):
         ]
     )
 
-    test_transform = transforms.Compose(
-        [
-            transforms.Resize(
-                (args.image_res, args.image_res), interpolation=Image.BICUBIC
-            ),
-            transforms.ToTensor(),
-            normalize,
-        ]
-    )
-
-    if dataset == "re":
-        if use_test_transform:
-            train_dataset = re_train_dataset(
-                [args.train_file], test_transform, args.train_image_root
-            )
-        else:
-            train_dataset = re_train_dataset(
-                [args.train_file], train_transform, args.train_image_root
-            )
-        return train_dataset
-
-    elif dataset == "imagenet100":
-        train_dataset = ImageNet100Dataset(
-            root=args.train_image_root,
-            transform=train_transform,
-            noise_level=args.noise_level,
-        )
-        return train_dataset
-
-    else:
-        assert 0, dataset + " is not supported."
+    return make_dataset_train(transform=train_transform, args=args)
 
 
 def create_val_dataset(dataset, args, val_file, val_image_root, test_file=None):
