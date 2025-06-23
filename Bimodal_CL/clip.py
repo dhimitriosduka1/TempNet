@@ -66,6 +66,9 @@ from dataset.cc3m_wds import (
 
 from env_config.config_manager import ConfigManager
 
+import wandb
+from global_step import GlobalStep
+
 cm = ConfigManager()
 
 
@@ -185,6 +188,15 @@ def train(
 
                 grad_scaler.update()
 
+                if utils.is_main_process():
+                    wandb.log(
+                        {
+                            "train/clip_loss": clip_loss.item(),
+                            "train/temp_loss": temp_loss.item(),
+                        },
+                        step=GlobalStep.get(),
+                    )
+
             else:
                 metric_logger.update(loss_ita=loss_term.item())
 
@@ -213,6 +225,8 @@ def train(
 
         if epoch == 0 and i % step_size == 0 and i <= warmup_iterations:
             scheduler.step(i // step_size)
+
+        GlobalStep.increment()
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -489,6 +503,27 @@ def concat_all_gather(tensor):
 def main(args):
     utils.init_distributed_mode(args)
 
+    if utils.is_main_process():
+        # Check if a run exists for the current experiment
+        run_id = None
+        wandb_run_id_path = os.path.join(args.output_dir, "wandb_id.json")
+        if os.path.exists(wandb_run_id_path):
+            with open(wandb_run_id_path, "r") as f:
+                run_id = json.load(f)["wandb_id"]
+
+        wandb.init(
+            project="Bimodal_CL_CC3M",
+            name=args.run_name,
+            resume="allow",
+            id=run_id,
+            config=args,
+            entity="dduka-max-planck-society",
+        )
+
+        # Save wandb run id to a file
+        with open(wandb_run_id_path, "w") as f:
+            json.dump({"wandb_id": wandb.run.id}, f)
+
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -749,7 +784,7 @@ def main(args):
                     attention_mask=text.attention_mask,
                     output_hidden_states=False,
                 )
-                
+
                 text_embeds = model.text_proj(text_output.last_hidden_state[:, 0, :])
 
                 model.criterion.image_temp_gen._init_prototypes(text_embeds[:256, :])
@@ -1044,25 +1079,9 @@ def main(args):
     print("Start training")
     start_time = time.time()
     for epoch in range(0, max_epoch):
-        if not args.evaluate:
-            # if args.distributed:
-            #     train_loader.sampler.set_epoch(epoch)
-            
-            train_stats = train(
-                model,
-                train_loader,
-                optimizer,
-                optimizer_tempnet,
-                tokenizer,
-                epoch,
-                max_epoch,
-                warmup_steps,
-                device,
-                lr_scheduler,
-                grad_scaler,
-                args,
-            )
-
+        # if not args.evaluate:
+        # if args.distributed:
+        #     train_loader.sampler.set_epoch(epoch)
         score_val_i2t_coco, score_val_t2i_coco = evaluation(
             model_without_ddp, val_coco_loader, tokenizer, device, args
         )
@@ -1087,7 +1106,6 @@ def main(args):
         #     )
 
         if utils.is_main_process():
-
             val_result_coco = itm_eval(
                 score_val_i2t_coco,
                 score_val_t2i_coco,
@@ -1103,21 +1121,62 @@ def main(args):
             )
             print("coco test:", test_result_coco)
 
-            if args.evaluate:
-                val_result_flickr = itm_eval(
-                    score_val_i2t_flickr,
-                    score_val_t2i_flickr,
-                    val_flickr_loader.dataset.txt2img,
-                    val_flickr_loader.dataset.img2txt,
-                )
-                print("flickr val:", val_result_flickr)
-                test_result_flickr = itm_eval(
-                    score_test_i2t_flickr,
-                    score_test_t2i_flickr,
-                    test_flickr_loader.dataset.txt2img,
-                    test_flickr_loader.dataset.img2txt,
-                )
-                print("flickr test:", test_result_flickr)
+            val_result_flickr = itm_eval(
+                score_val_i2t_flickr,
+                score_val_t2i_flickr,
+                val_flickr_loader.dataset.txt2img,
+                val_flickr_loader.dataset.img2txt,
+            )
+            print("flickr val:", val_result_flickr)
+            test_result_flickr = itm_eval(
+                score_test_i2t_flickr,
+                score_test_t2i_flickr,
+                test_flickr_loader.dataset.txt2img,
+                test_flickr_loader.dataset.img2txt,
+            )
+            print("flickr test:", test_result_flickr)
+
+            wandb.log(
+                {
+                    "val/coco/txt_r1": val_result_coco["txt_r1"],
+                    "val/coco/txt_r5": val_result_coco["txt_r5"],
+                    "val/coco/txt_r10": val_result_coco["txt_r10"],
+                    "val/coco/txt_r_mean": val_result_coco["txt_r_mean"],
+                    "val/coco/img_r1": val_result_coco["img_r1"],
+                    "val/coco/img_r5": val_result_coco["img_r5"],
+                    "val/coco/img_r10": val_result_coco["img_r10"],
+                    "val/coco/img_r_mean": val_result_coco["img_r_mean"],
+                    "val/coco/r_mean": val_result_coco["r_mean"],
+                    "test/coco/txt_r1": test_result_coco["txt_r1"],
+                    "test/coco/txt_r5": test_result_coco["txt_r5"],
+                    "test/coco/txt_r10": test_result_coco["txt_r10"],
+                    "test/coco/txt_r_mean": test_result_coco["txt_r_mean"],
+                    "test/coco/img_r1": test_result_coco["img_r1"],
+                    "test/coco/img_r5": test_result_coco["img_r5"],
+                    "test/coco/img_r10": test_result_coco["img_r10"],
+                    "test/coco/img_r_mean": test_result_coco["img_r_mean"],
+                    "test/coco/r_mean": test_result_coco["r_mean"],
+                    "val/flickr/txt_r1": val_result_flickr["txt_r1"],
+                    "val/flickr/txt_r5": val_result_flickr["txt_r5"],
+                    "val/flickr/txt_r10": val_result_flickr["txt_r10"],
+                    "val/flickr/txt_r_mean": val_result_flickr["txt_r_mean"],
+                    "val/flickr/img_r1": val_result_flickr["img_r1"],
+                    "val/flickr/img_r5": val_result_flickr["img_r5"],
+                    "val/flickr/img_r10": val_result_flickr["img_r10"],
+                    "val/flickr/img_r_mean": val_result_flickr["img_r_mean"],
+                    "val/flickr/r_mean": val_result_flickr["r_mean"],
+                    "test/flickr/txt_r1": test_result_flickr["txt_r1"],
+                    "test/flickr/txt_r5": test_result_flickr["txt_r5"],
+                    "test/flickr/txt_r10": test_result_flickr["txt_r10"],
+                    "test/flickr/txt_r_mean": test_result_flickr["txt_r_mean"],
+                    "test/flickr/img_r1": test_result_flickr["img_r1"],
+                    "test/flickr/img_r5": test_result_flickr["img_r5"],
+                    "test/flickr/img_r10": test_result_flickr["img_r10"],
+                    "test/flickr/img_r_mean": test_result_flickr["img_r_mean"],
+                    "test/flickr/r_mean": test_result_flickr["r_mean"],
+                },
+                step=GlobalStep.get(),
+            )
 
             # save tau for visualization
             if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
@@ -1162,15 +1221,15 @@ def main(args):
                 #     f.write(json.dumps(zeroshot_results) + "\n")
 
             else:
-                log_stats = {
-                    **{f"train_{k}": v for k, v in train_stats.items()},
-                    **{f"val_{k}": v for k, v in val_result_coco.items()},
-                    **{f"test_{k}": v for k, v in test_result_coco.items()},
-                    "epoch": epoch,
-                    "data": "coco",
-                }
-                with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
-                    f.write(json.dumps(log_stats) + "\n")
+                # log_stats = {
+                #     **{f"train_{k}": v for k, v in train_stats.items()},
+                #     **{f"val_{k}": v for k, v in val_result_coco.items()},
+                #     **{f"test_{k}": v for k, v in test_result_coco.items()},
+                #     "epoch": epoch,
+                #     "data": "coco",
+                # }
+                # with open(os.path.join(args.output_dir, "coco_log.txt"), "a") as f:
+                #     f.write(json.dumps(log_stats) + "\n")
 
                 if val_result_coco["r_mean"] > best:
                     save_obj = {
@@ -1194,6 +1253,21 @@ def main(args):
                             args.output_dir, "checkpoint_" + str(epoch + 1) + ".pth"
                         ),
                     )
+
+        train(
+            model,
+            train_loader,
+            optimizer,
+            optimizer_tempnet,
+            tokenizer,
+            epoch,
+            max_epoch,
+            warmup_steps,
+            device,
+            lr_scheduler,
+            grad_scaler,
+            args,
+        )
 
         if args.evaluate:
             break
@@ -1332,6 +1406,9 @@ if __name__ == "__main__":
 
     # cc3m
     parser.add_argument("--captions_path", default=cm.get_config_for("captions_path"))
+
+    # run name
+    parser.add_argument("--run_name", default="", type=str)
 
     args = parser.parse_args()
 
