@@ -313,11 +313,13 @@ class CC3M_Val_Dataset(Dataset):
         image = self.transform(image)
 
         class_ = torch.tensor((self.img2cls[image_id]))
+        superclass = torch.tensor((self.cls2supercls[class_.item()]))
 
         return {
             "image": image,
             "caption": self.text[index],
             "class_": class_,
+            "superclass": superclass,
             "index": index,
             "key": image_id,
         }
