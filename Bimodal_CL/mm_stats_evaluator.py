@@ -38,11 +38,9 @@ class MMStatsEvaluator:
             classes = torch.cat(self.gather_layer(classes), dim=0)
             superclasses = torch.cat(self.gather_layer(superclasses), dim=0)
 
-        unique_classes = torch.unique(classes).tolist()
-        unique_superclasses = torch.unique(superclasses).tolist()
-
         metrics = {}
 
+        # /////////////////////// Modality Gap ///////////////////////
         # First, let's compute the domain gap between the two modalities
         modality_gap = self._compute_modality_gap(features, other_features)
         self.running_average_trackers["modality"].update(modality_gap)
@@ -51,6 +49,39 @@ class MMStatsEvaluator:
         metrics["modality/gap_running_average"] = self.running_average_trackers[
             "modality"
         ].get_value()
+
+        # Then, let's compute the modality gap per class
+        per_class_modality_gap = self._compute_modality_gap_per_class(
+            features, other_features, classes
+        )
+        metrics.update(per_class_modality_gap)
+
+        # Then, let's compute the modality gap per superclass
+        per_superclass_modality_gap = self._compute_modality_gap_per_superclass(
+            features, other_features, superclasses
+        )
+        metrics.update(per_superclass_modality_gap)
+
+        return metrics
+
+    def format(self, metrics, prefix="val"):
+        formatted_metrics = {}
+
+        for key, value in metrics.items():
+            formatted_metrics[f"{prefix}/{key}"] = value
+
+        return formatted_metrics
+
+    def _compute_modality_gap(self, features, other_features):
+        """Compute the modality gap between the two modalities."""
+        features_mean = features.mean(dim=0)
+        other_features_mean = other_features.mean(dim=0)
+        return torch.abs(torch.norm(features_mean - other_features_mean))
+
+    def _compute_modality_gap_per_class(self, features, other_features, classes):
+        """Compute the modality gap between the two modalities for each class."""
+        unique_classes = torch.unique(classes).tolist()
+        metrics = {}
 
         # Modality gap for each class
         for class_ in unique_classes:
@@ -69,6 +100,15 @@ class MMStatsEvaluator:
                     self.class_template.format(class_)
                 ].get_value()
             )
+
+        return metrics
+
+    def _compute_modality_gap_per_superclass(
+        self, features, other_features, superclasses
+    ):
+        """Compute the modality gap between the two modalities for each superclass."""
+        unique_superclasses = torch.unique(superclasses).tolist()
+        metrics = {}
 
         # Modality gap for each superclass
         for superclass_ in unique_superclasses:
@@ -94,16 +134,17 @@ class MMStatsEvaluator:
 
         return metrics
 
-    def format(self, metrics, prefix="val"):
-        formatted_metrics = {}
+    def _compute_average_pairwise_distance(self, features, other_features):
+        """Compute the average pairwise distance between the two modalities. Embeddings must be normalized to unit length."""
+        pairwise_dists = torch.cdist(features, features, p=2)
 
-        for key, value in metrics.items():
-            formatted_metrics[f"{prefix}/{key}"] = value
+        # Get upper triangle (excluding diagonal)
+        pairwise_dists = pairwise_dists[
+            torch.triu(torch.ones_like(pairwise_dists), diagonal=1) == 1
+        ]
 
-        return formatted_metrics
-
-    def _compute_modality_gap(self, features, other_features):
-        """Compute the modality gap between the two modalities. Embeddings must be normalized to unit length."""
-        features_mean = features.mean(dim=0)
-        other_features_mean = other_features.mean(dim=0)
-        return torch.abs(torch.norm(features_mean - other_features_mean))
+        # Compute the average and max pairwise distance
+        return {
+            "average": torch.mean(pairwise_dists),
+            "max": torch.max(pairwise_dists),
+        }
