@@ -1937,18 +1937,38 @@ if __name__ == "__main__":
 
     # Initialize the stats evaluator
     running_average_trackers = {
-        "modality": RunningAverageTracker(name="gap", alpha=0.9),
+        "modality": {
+            "gap": RunningAverageTracker(name="gap", alpha=0.9),
+            "average_pairwise_distance_image": RunningAverageTracker(
+                name="average_pairwise_distance_image", alpha=0.9
+            ),
+            "average_pairwise_distance_text": RunningAverageTracker(
+                name="average_pairwise_distance_text", alpha=0.9
+            ),
+        },
     }
 
     for i in range(args.number_of_classes):
-        running_average_trackers[f"class_{i}"] = RunningAverageTracker(
-            name="gap", alpha=0.9
-        )
+        running_average_trackers[f"class_{i}"] = {
+            "gap": RunningAverageTracker(name="gap", alpha=0.9),
+            "average_pairwise_distance_image": RunningAverageTracker(
+                name="average_pairwise_distance_image", alpha=0.9
+            ),
+            "average_pairwise_distance_text": RunningAverageTracker(
+                name="average_pairwise_distance_text", alpha=0.9
+            ),
+        }
 
     for i in range(args.number_of_superclasses):
-        running_average_trackers[f"superclass_{i}"] = RunningAverageTracker(
-            name="gap", alpha=0.9
-        )
+        running_average_trackers[f"superclass_{i}"] = {
+            "gap": RunningAverageTracker(name="gap", alpha=0.9),
+            "average_pairwise_distance_image": RunningAverageTracker(
+                name="average_pairwise_distance_image", alpha=0.9
+            ),
+            "average_pairwise_distance_text": RunningAverageTracker(
+                name="average_pairwise_distance_text", alpha=0.9
+            ),
+        }
 
     stats_evaluator = MMStatsEvaluator(
         world_size=args.world_size, running_average_trackers=running_average_trackers

@@ -30,11 +30,13 @@ class MMStatsEvaluator:
         self.class_template = "class_{}"
         self.superclass_template = "superclass_{}"
 
-    def evaluate(self, features, other_features, classes, superclasses, gather=False):
+    def evaluate(
+        self, image_features, text_features, classes, superclasses, gather=False
+    ):
         # Gather all stats from all processes
         if self.world_size > 1 and gather:
-            features = torch.cat(self.gather_layer(features), dim=0)
-            other_features = torch.cat(self.gather_layer(other_features), dim=0)
+            image_features = torch.cat(self.gather_layer(image_features), dim=0)
+            text_features = torch.cat(self.gather_layer(text_features), dim=0)
             classes = torch.cat(self.gather_layer(classes), dim=0)
             superclasses = torch.cat(self.gather_layer(superclasses), dim=0)
 
@@ -42,25 +44,50 @@ class MMStatsEvaluator:
 
         # /////////////////////// Modality Gap ///////////////////////
         # First, let's compute the domain gap between the two modalities
-        modality_gap = self._compute_modality_gap(features, other_features)
-        self.running_average_trackers["modality"].update(modality_gap)
+        modality_gap = self._compute_modality_gap(image_features, text_features)
+        self.running_average_trackers["modality"]["gap"].update(modality_gap)
 
         metrics["modality/gap"] = modality_gap
-        metrics["modality/gap_running_average"] = self.running_average_trackers[
-            "modality"
+        metrics["modality/gap_ema"] = self.running_average_trackers["modality"][
+            "gap"
         ].get_value()
 
         # Then, let's compute the modality gap per class
         per_class_modality_gap = self._compute_modality_gap_per_class(
-            features, other_features, classes
+            image_features, text_features, classes
         )
         metrics.update(per_class_modality_gap)
 
         # Then, let's compute the modality gap per superclass
         per_superclass_modality_gap = self._compute_modality_gap_per_superclass(
-            features, other_features, superclasses
+            image_features, text_features, superclasses
         )
         metrics.update(per_superclass_modality_gap)
+
+        # /////////////////////// Average Pairwise Distance ///////////////////////
+        # First, let's compute the average pairwise distance between the two modalities
+        per_modality_average_pairwise_distance = (
+            self._compute_average_pairwise_distance_per_modality(
+                image_features, text_features
+            )
+        )
+        metrics.update(per_modality_average_pairwise_distance)
+
+        # Then, let's compute the average pairwise distance per class
+        per_class_average_pairwise_distance = (
+            self._compute_average_pairwise_distance_per_class(
+                image_features, text_features, classes
+            )
+        )
+        metrics.update(per_class_average_pairwise_distance)
+
+        # Then, let's compute the average pairwise distance per superclass
+        per_superclass_average_pairwise_distance = (
+            self._compute_average_pairwise_distance_per_superclass(
+                image_features, text_features, superclasses
+            )
+        )
+        metrics.update(per_superclass_average_pairwise_distance)
 
         return metrics
 
@@ -90,14 +117,14 @@ class MMStatsEvaluator:
             class_modality_gap = self._compute_modality_gap(
                 class_features, class_other_features
             )
-            self.running_average_trackers[self.class_template.format(class_)].update(
-                class_modality_gap
-            )
+            self.running_average_trackers[self.class_template.format(class_)][
+                "gap"
+            ].update(class_modality_gap)
 
             metrics[f"{self.class_template.format(class_)}/gap"] = class_modality_gap
-            metrics[f"{self.class_template.format(class_)}/gap_running_average"] = (
-                self.running_average_trackers[
-                    self.class_template.format(class_)
+            metrics[f"{self.class_template.format(class_)}/gap_ema"] = (
+                self.running_average_trackers[self.class_template.format(class_)][
+                    "gap"
                 ].get_value()
             )
 
@@ -118,23 +145,23 @@ class MMStatsEvaluator:
                 superclass_features, superclass_other_features
             )
 
-            self.running_average_trackers[
-                self.superclass_template.format(superclass_)
+            self.running_average_trackers[self.superclass_template.format(superclass_)][
+                "gap"
             ].update(superclass_modality_gap)
 
             metrics[f"{self.superclass_template.format(superclass_)}/gap"] = (
                 superclass_modality_gap
             )
 
-            metrics[
-                f"{self.superclass_template.format(superclass_)}/gap_running_average"
-            ] = self.running_average_trackers[
-                self.superclass_template.format(superclass_)
-            ].get_value()
+            metrics[f"{self.superclass_template.format(superclass_)}/gap_ema"] = (
+                self.running_average_trackers[
+                    self.superclass_template.format(superclass_)
+                ]["gap"].get_value()
+            )
 
         return metrics
 
-    def _compute_average_pairwise_distance(self, features, other_features):
+    def _compute_average_pairwise_distance(self, features):
         """Compute the average pairwise distance between the two modalities. Embeddings must be normalized to unit length."""
         pairwise_dists = torch.cdist(features, features, p=2)
 
@@ -144,7 +171,132 @@ class MMStatsEvaluator:
         ]
 
         # Compute the average and max pairwise distance
-        return {
-            "average": torch.mean(pairwise_dists),
-            "max": torch.max(pairwise_dists),
-        }
+        return torch.mean(pairwise_dists)
+
+    def _compute_average_pairwise_distance_per_modality(
+        self, image_features, text_features
+    ):
+        """Compute the average pairwise distance between the two modalities."""
+        metrics = {}
+        average_pairwise_distance_image = self._compute_average_pairwise_distance(
+            image_features
+        )
+        self.running_average_trackers["modality"][
+            "average_pairwise_distance_image"
+        ].update(average_pairwise_distance_image)
+
+        average_pairwise_distance_text = self._compute_average_pairwise_distance(
+            text_features
+        )
+        self.running_average_trackers["modality"][
+            "average_pairwise_distance_text"
+        ].update(average_pairwise_distance_text)
+
+        metrics["modality/average_pairwise_distance_image"] = (
+            average_pairwise_distance_image
+        )
+        metrics["modality/average_pairwise_distance_text"] = (
+            average_pairwise_distance_text
+        )
+        metrics["modality/average_pairwise_distance_image_ema"] = (
+            self.running_average_trackers["modality"][
+                "average_pairwise_distance_image"
+            ].get_value()
+        )
+        metrics["modality/average_pairwise_distance_text_ema"] = (
+            self.running_average_trackers["modality"][
+                "average_pairwise_distance_text"
+            ].get_value()
+        )
+
+        return metrics
+
+    def _compute_average_pairwise_distance_per_class(
+        self, image_features, text_features, classes
+    ):
+        """Compute the average pairwise distance between the two modalities for each class."""
+        unique_classes = torch.unique(classes).tolist()
+        metrics = {}
+
+        for class_ in unique_classes:
+            class_key = self.class_template.format(class_)
+            per_class_image_features = image_features[classes == class_]
+            per_class_text_features = text_features[classes == class_]
+            per_class_average_pairwise_distance = (
+                self._compute_average_pairwise_distance(per_class_image_features)
+            )
+            self.running_average_trackers[class_key][
+                "average_pairwise_distance_image"
+            ].update(per_class_average_pairwise_distance)
+
+            metrics[f"{class_key}/average_pairwise_distance_image"] = (
+                per_class_average_pairwise_distance
+            )
+            metrics[f"{class_key}/average_pairwise_distance_image_ema"] = (
+                self.running_average_trackers[class_key][
+                    "average_pairwise_distance_image"
+                ].get_value()
+            )
+
+            per_class_average_pairwise_distance = (
+                self._compute_average_pairwise_distance(per_class_text_features)
+            )
+            self.running_average_trackers[class_key][
+                "average_pairwise_distance_text"
+            ].update(per_class_average_pairwise_distance)
+
+            metrics[f"{class_key}/average_pairwise_distance_text"] = (
+                per_class_average_pairwise_distance
+            )
+            metrics[f"{class_key}/average_pairwise_distance_text_ema"] = (
+                self.running_average_trackers[class_key][
+                    "average_pairwise_distance_text"
+                ].get_value()
+            )
+
+        return metrics
+
+    def _compute_average_pairwise_distance_per_superclass(
+        self, image_features, text_features, superclasses
+    ):
+        """Compute the average pairwise distance between the two modalities for each superclass."""
+        unique_superclasses = torch.unique(superclasses).tolist()
+        metrics = {}
+
+        for superclass_ in unique_superclasses:
+            superclass_key = self.superclass_template.format(superclass_)
+            per_superclass_image_features = image_features[superclasses == superclass_]
+            per_superclass_average_pairwise_distance = (
+                self._compute_average_pairwise_distance(per_superclass_image_features)
+            )
+            self.running_average_trackers[superclass_key][
+                "average_pairwise_distance_image"
+            ].update(per_superclass_average_pairwise_distance)
+
+            metrics[f"{superclass_key}/average_pairwise_distance_image"] = (
+                per_superclass_average_pairwise_distance
+            )
+            metrics[f"{superclass_key}/average_pairwise_distance_image_ema"] = (
+                self.running_average_trackers[superclass_key][
+                    "average_pairwise_distance_image"
+                ].get_value()
+            )
+
+            per_superclass_text_features = text_features[superclasses == superclass_]
+            per_superclass_average_pairwise_distance = (
+                self._compute_average_pairwise_distance(per_superclass_text_features)
+            )
+            self.running_average_trackers[superclass_key][
+                "average_pairwise_distance_text"
+            ].update(per_superclass_average_pairwise_distance)
+
+            metrics[f"{superclass_key}/average_pairwise_distance_text"] = (
+                per_superclass_average_pairwise_distance
+            )
+            metrics[f"{superclass_key}/average_pairwise_distance_text_ema"] = (
+                self.running_average_trackers[superclass_key][
+                    "average_pairwise_distance_text"
+                ].get_value()
+            )
+
+        return metrics
