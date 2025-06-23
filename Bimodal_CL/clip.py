@@ -1935,43 +1935,37 @@ if __name__ == "__main__":
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
     )
 
+    average_tracker_template = {
+        "gap": RunningAverageTracker(name="gap", alpha=0.9),
+        "average_pairwise_distance_image": RunningAverageTracker(
+            name="average_pairwise_distance_image", alpha=0.9
+        ),
+        "average_pairwise_distance_text": RunningAverageTracker(
+            name="average_pairwise_distance_text", alpha=0.9
+        ),
+        "temp_pos": RunningAverageTracker(name="temp_pos", alpha=0.9),
+        "temp_neg": RunningAverageTracker(name="temp_neg", alpha=0.9),
+        "temp_avg": RunningAverageTracker(name="temp_avg", alpha=0.9),
+        "temp_min": RunningAverageTracker(name="temp_min", alpha=0.9),
+        "temp_max": RunningAverageTracker(name="temp_max", alpha=0.9),
+    }
+
     # Initialize the stats evaluator
     running_average_trackers = {
-        "modality": {
-            "gap": RunningAverageTracker(name="gap", alpha=0.9),
-            "average_pairwise_distance_image": RunningAverageTracker(
-                name="average_pairwise_distance_image", alpha=0.9
-            ),
-            "average_pairwise_distance_text": RunningAverageTracker(
-                name="average_pairwise_distance_text", alpha=0.9
-            ),
-        },
+        "modality": average_tracker_template,
     }
 
     for i in range(args.number_of_classes):
-        running_average_trackers[f"class_{i}"] = {
-            "gap": RunningAverageTracker(name="gap", alpha=0.9),
-            "average_pairwise_distance_image": RunningAverageTracker(
-                name="average_pairwise_distance_image", alpha=0.9
-            ),
-            "average_pairwise_distance_text": RunningAverageTracker(
-                name="average_pairwise_distance_text", alpha=0.9
-            ),
-        }
+        running_average_trackers[f"class_{i}"] = average_tracker_template
 
     for i in range(args.number_of_superclasses):
-        running_average_trackers[f"superclass_{i}"] = {
-            "gap": RunningAverageTracker(name="gap", alpha=0.9),
-            "average_pairwise_distance_image": RunningAverageTracker(
-                name="average_pairwise_distance_image", alpha=0.9
-            ),
-            "average_pairwise_distance_text": RunningAverageTracker(
-                name="average_pairwise_distance_text", alpha=0.9
-            ),
-        }
+        running_average_trackers[f"superclass_{i}"] = average_tracker_template
 
     stats_evaluator = MMStatsEvaluator(
-        world_size=args.world_size, running_average_trackers=running_average_trackers
+        world_size=args.world_size,
+        running_average_trackers=running_average_trackers,
+        temperature=args.temp,
+        alpha=args.sim_based_loss_alpha,
     )
 
     try:
