@@ -72,6 +72,10 @@ cm = ConfigManager()
 # Imports for text expert
 from sentence_transformers import SentenceTransformer
 
+# Import for stats evaluator
+from mm_stats_evaluator import MMStatsEvaluator
+from running_average_tracker import RunningAverageTracker
+
 
 def train(
     model,
@@ -263,14 +267,14 @@ def train(
                         "train/loss": loss_term,
                         "train/lr": optimizer.param_groups[0]["lr"],
                     }
-                    
+
                     if args.ita_type == "isogclr_tempnet":
                         clip_loss = loss_term[0]
                         temp_loss = loss_term[1]
 
                         log_obj["train/loss"] = clip_loss
                         log_obj["train/temp_loss"] = temp_loss
-                    
+
                     wandb.log(log_obj, step=GlobalStep.get())
 
             if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
@@ -462,14 +466,14 @@ def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
 
 
 @torch.no_grad()
-def evaluation(model, data_loader, tokenizer, device, args):
+def evaluation(model, data_loader, tokenizer, device, args, dataset_name):
     # test
     model.eval()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Evaluation:"
 
-    print("Computing features for evaluation...")
+    print(f"Computing features for evaluation on {dataset_name}...")
     start_time = time.time()
 
     texts = data_loader.dataset.text
@@ -497,16 +501,33 @@ def evaluation(model, data_loader, tokenizer, device, args):
     text_embeds = torch.cat(text_embeds, dim=0)
 
     image_embeds = []
+    classes = []
+    superclasses = []
+
     # for image, img_id in data_loader:
     for batch in data_loader:
         image = batch["image"]
+        if dataset_name == "cc3m":
+            classes.append(batch["class_"])
+            superclasses.append(batch["superclass"])
 
         image = image.to(device)
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
         image_embed = F.normalize(image_embed, dim=-1)
         image_embeds.append(image_embed)
+
     image_embeds = torch.cat(image_embeds, dim=0)
+
+    stats = {}
+    if dataset_name == "cc3m":
+        classes = torch.cat(classes, dim=0)
+        superclasses = torch.cat(superclasses, dim=0)
+
+        stats = stats_evaluator.evaluate(
+            image_embeds, text_embeds, classes, superclasses, gather=False
+        )
+        stats = stats_evaluator.format(stats, prefix="cc3m/val")
 
     sims_matrix = image_embeds @ text_embeds.t()
     score_matrix_i2t = torch.full(
@@ -544,7 +565,7 @@ def evaluation(model, data_loader, tokenizer, device, args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Evaluation time {}".format(total_time_str))
 
-    return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy()
+    return score_matrix_i2t.cpu().numpy(), score_matrix_t2i.cpu().numpy(), stats
 
 
 @torch.no_grad()
@@ -818,8 +839,8 @@ def main(args):
     zs_dataset = args.zs_dataset
     zeroshot_dataloader = None
 
-    zsh_eval = args.zsh_eval    
-    
+    zsh_eval = args.zsh_eval
+
     if zsh_eval:
         zeroshot_dataloader = create_zeroshot_dataloader(
             dataset_name=zs_dataset,
@@ -874,6 +895,8 @@ def main(args):
         for i, batch in tqdm(enumerate(train_loader)):
             image = batch["image"]
             text = batch["caption"]
+            idx = batch["index"]
+            text_idx = batch["text_idx"]
 
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
@@ -1003,8 +1026,12 @@ def main(args):
                 )
                 text_embeds = model.text_proj(text_output.last_hidden_state[:, 0, :])
 
-                model.criterion.image_temp_gen._init_prototypes(text_embeds[:args.batch_size_train, :])
-                model.criterion.text_temp_gen._init_prototypes(image_embeds[:args.batch_size_train, :])
+                model.criterion.image_temp_gen._init_prototypes(
+                    text_embeds[: args.batch_size_train, :]
+                )
+                model.criterion.text_temp_gen._init_prototypes(
+                    image_embeds[: args.batch_size_train, :]
+                )
 
     if args.vis_prototypes:
         model.eval()
@@ -1350,7 +1377,9 @@ def main(args):
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
     if zsh_eval:
-        zsh_results = zeroshot_transfer(model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device)
+        zsh_results = zeroshot_transfer(
+            model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device
+        )
         print("finished zeroshot transfer")
         print(zsh_results)
 
@@ -1500,22 +1529,22 @@ def evaluate(
     device,
     args,
 ):
-    score_val_i2t_coco, score_val_t2i_coco = evaluation(
-        model_without_ddp, val_coco_loader, tokenizer, device, args
+    score_val_i2t_coco, score_val_t2i_coco, _ = evaluation(
+        model_without_ddp, val_coco_loader, tokenizer, device, args, "coco"
     )
-    score_test_i2t_coco, score_test_t2i_coco = evaluation(
-        model_without_ddp, test_coco_loader, tokenizer, device, args
-    )
-
-    score_val_i2t_flickr, score_val_t2i_flickr = evaluation(
-        model_without_ddp, val_flickr_loader, tokenizer, device, args
-    )
-    score_test_i2t_flickr, score_test_t2i_flickr = evaluation(
-        model_without_ddp, test_flickr_loader, tokenizer, device, args
+    score_test_i2t_coco, score_test_t2i_coco, _ = evaluation(
+        model_without_ddp, test_coco_loader, tokenizer, device, args, "coco"
     )
 
-    score_val_i2t_cc3m, score_val_t2i_cc3m = evaluation(
-        model_without_ddp, val_cc3m_loader, tokenizer, device, args
+    score_val_i2t_flickr, score_val_t2i_flickr, _ = evaluation(
+        model_without_ddp, val_flickr_loader, tokenizer, device, args, "flickr"
+    )
+    score_test_i2t_flickr, score_test_t2i_flickr, _ = evaluation(
+        model_without_ddp, test_flickr_loader, tokenizer, device, args, "flickr"
+    )
+
+    score_val_i2t_cc3m, score_val_t2i_cc3m, cc3m_stats = evaluation(
+        model_without_ddp, val_cc3m_loader, tokenizer, device, args, "cc3m"
     )
 
     val_result_cc3m = itm_eval(
@@ -1581,6 +1610,7 @@ def evaluate(
         | val_result_flickr_wandb
         | test_result_flickr_wandb
         | val_result_cc3m_wandb
+        | cc3m_stats
     )
 
     if utils.is_main_process():
@@ -1827,6 +1857,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--zsh_eval", action="store_true")
 
+    parser.add_argument("--number_of_classes", default=18, type=int)
+    parser.add_argument("--number_of_superclasses", default=3, type=int)
+
     args = parser.parse_args()
 
     # Validation
@@ -1852,6 +1885,14 @@ if __name__ == "__main__":
             validation_errors.append(
                 "If --ita_type is 'scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss', --enable_i2i_loss and --enable_t2t_loss must be set."
             )
+
+    # /ptmp/dduka/work/data/cc3m/validation/cc3m_validation_key_class_mapping_18.pk !!!! The format of the file must be like this
+    if args.number_of_classes != int(
+        args.cc3m_img2cls_file.split("/")[-1].split(".")[0].split("_")[-1]
+    ):
+        validation_errors.append(
+            "The number of classes in the cc3m_img2cls_file must match the number of classes in the pickle file."
+        )
 
     # TODO: Maybe add some more validations here
     if validation_errors:
@@ -1892,6 +1933,25 @@ if __name__ == "__main__":
 
     json.dump(
         args.__dict__, open(os.path.join(args.output_dir, "args.json"), "w"), indent=2
+    )
+
+    # Initialize the stats evaluator
+    running_average_trackers = {
+        "modality": RunningAverageTracker(name="gap", alpha=0.9),
+    }
+
+    for i in range(args.number_of_classes):
+        running_average_trackers[f"class_{i}"] = RunningAverageTracker(
+            name="gap", alpha=0.9
+        )
+
+    for i in range(args.number_of_superclasses):
+        running_average_trackers[f"superclass_{i}"] = RunningAverageTracker(
+            name="gap", alpha=0.9
+        )
+
+    stats_evaluator = MMStatsEvaluator(
+        world_size=args.world_size, running_average_trackers=running_average_trackers
     )
 
     try:
