@@ -31,7 +31,7 @@ def get_world_size():
 
 def get_train_dataset_size():
     # Value we got after counting the number of samples in the training dataset
-    return 2048
+    return 2905954
 
 
 def get_val_dataset_size():
