@@ -207,6 +207,14 @@ def train(
 
                 grad_scaler.update()
 
+                if utils.is_main_process():
+                    wandb.log(
+                        {
+                            "train/loss": loss_term.item(),
+                        },
+                        step=GlobalStep.get(),
+                    )
+
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         if args.ita_type == "isogclr_tempnet":
