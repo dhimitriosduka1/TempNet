@@ -563,7 +563,7 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         g_I = torch.sum(exp_image_diffs, dim=1, keepdim=True)
         g_T = torch.sum(exp_text_diffs, dim=0, keepdim=True)
 
-        if epoch == 0:
+        if False:
             s_I = g_I
             s_T = g_T
         else:
