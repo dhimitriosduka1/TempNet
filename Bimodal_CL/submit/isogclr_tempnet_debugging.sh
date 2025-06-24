@@ -11,7 +11,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mem=480000
 
-#SBATCH --time=23:59:59
+#SBATCH --time=09:59:59
 
 module purge
 module load anaconda/3/2023.03
@@ -27,7 +27,7 @@ data=cc3m
 
 # isogclr_tempnet
 lr=8e-4
-desc=isogclr_tempnet_lr3e-5_exp09_M256_debugging
+desc=isogclr_tempnet_lr3e-5_exp09_M256_debugging_2
 gamma=0.8
 rho=7.0
 

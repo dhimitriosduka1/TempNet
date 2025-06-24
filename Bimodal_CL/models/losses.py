@@ -513,6 +513,9 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         ).cuda()
         self.text_temp_gen = TempGenerator(feature_dim=feature_dim, rho=self.rho).cuda()
 
+        self.print_debug = True
+        self.prev_epoch = -1
+
     def forward(
         self, image_features, text_features, image_ids, text_ids, epoch, max_epoch
     ):
@@ -563,7 +566,7 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         g_I = torch.sum(exp_image_diffs, dim=1, keepdim=True)
         g_T = torch.sum(exp_text_diffs, dim=0, keepdim=True)
 
-        if False:
+        if epoch == 0:
             s_I = g_I
             s_T = g_T
         else:
@@ -576,11 +579,34 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
             s_I = s_I.reshape(g_I.shape)
             s_T = s_T.reshape(g_T.shape)
 
+        if epoch != self.prev_epoch:
+            self.prev_epoch = epoch
+            self.print_debug = True
+
+        if epoch in [0, 1] and self.print_debug:
+            # Print if the values in s_I and s_T are different than 0
+            print(f"==> For s_I: {torch.all(s_I != 0)}")
+            print(f"==> For s_T: {torch.all(s_T != 0)}")
+
+            # Print number of zeros in s_I, s_T
+            print(f"==> Number of zeros in s_I: {torch.sum(s_I == 0)}")
+            print(f"==> Number of zeros in s_T: {torch.sum(s_T == 0)}")
+
         self.s_I[image_ids] = s_I.squeeze()
         self.s_T[text_ids] = s_T.squeeze()
 
         s_I = s_I.clamp(min=self.eps)
         s_T = s_T.clamp(min=self.eps)
+
+        if epoch in [0, 1] and self.print_debug:
+            # Print the values of s_I and s_T
+            print(f"==> For s_I after clamp: {s_I}")
+            print(f"==> For s_T after clamp: {s_T}")
+
+            print(f"==> For s_I after clamp: {torch.sum(s_I == 0)}")
+            print(f"==> For s_T after clamp: {torch.sum(s_T == 0)}")
+
+            self.print_debug = False
 
         weights_image = exp_image_diffs / s_I
         weights_text = exp_text_diffs / s_T
