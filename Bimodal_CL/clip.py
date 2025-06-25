@@ -895,7 +895,7 @@ def main(args):
         for i, batch in tqdm(enumerate(train_loader)):
             image = batch["image"]
             text = batch["caption"]
-            idx = batch["index"]
+            idx = batch["idx"]
             text_idx = batch["text_idx"]
 
             image = image.to(device, non_blocking=True)
