@@ -4,7 +4,7 @@
 #SBATCH --partition gpu22
 
 #SBATCH --time=05:59:00
-#SBATCH -a 1-8%1
+#SBATCH -a 1-4%1
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
