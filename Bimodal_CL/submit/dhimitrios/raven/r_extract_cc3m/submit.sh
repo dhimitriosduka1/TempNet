@@ -1,71 +1,59 @@
 #!/bin/bash -l
 
-#SBATCH -o /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
-#SBATCH -e /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
+#SBATCH --job-name=cc3m_extract
+#SBATCH --array=1-100%20
 
-#SBATCH --job-name bcl
+#SBATCH --output=tar_array_%A_%a.out
+#SBATCH --error=tar_array_%A_%a.err
 
+#SBATCH --time=24:00:00
 #SBATCH --ntasks=1
-#SBATCH --constraint="gpu"
 
-#SBATCH --gres=gpu:1
-#SBATCH --mem=120000
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16000
 
-#SBATCH --time=23:59:59
-
+# Load required modules for Raven
 module purge
-module load anaconda/3/2023.03
+module load gcc/13
 
-conda activate bimodal_cl
-
+# Configuration - modify these paths as needed
 TAR_SOURCE_DIR="/ptmp/dduka/work/data/cc3m/training"
 EXTRACT_DEST_DIR="/ptmp/dduka/work/data/cc3m/training/extracted"
 
 # Create destination directory if it doesn't exist
 mkdir -p "$EXTRACT_DEST_DIR"
 
-# Change to the destination directory
-cd "$EXTRACT_DEST_DIR"
+# Create array of tar files
+mapfile -t TAR_FILES < <(find "$TAR_SOURCE_DIR" -name "*.tar" -type f | sort)
 
-echo "Starting extraction at $(date)"
-echo "Source directory: $TAR_SOURCE_DIR"
-echo "Destination directory: $EXTRACT_DEST_DIR"
+# Calculate which file this job should process
+TOTAL_FILES=${#TAR_FILES[@]}
+FILES_PER_JOB=$(( (TOTAL_FILES + SLURM_ARRAY_TASK_COUNT - 1) / SLURM_ARRAY_TASK_COUNT ))
+START_INDEX=$(( (SLURM_ARRAY_TASK_ID - 1) * FILES_PER_JOB ))
+END_INDEX=$(( START_INDEX + FILES_PER_JOB - 1 ))
 
-# Initialize counters
-total_files=0
-extracted_files=0
-failed_files=0
+# Ensure we don't go beyond the array bounds
+if [ $END_INDEX -ge $TOTAL_FILES ]; then
+    END_INDEX=$(( TOTAL_FILES - 1 ))
+fi
 
-# Count total tar files
-total_files=$(find "$TAR_SOURCE_DIR" -name "*.tar" -type f | wc -l)
-echo "Found $total_files tar files to extract"
+echo "Job array task $SLURM_ARRAY_TASK_ID processing files $START_INDEX to $END_INDEX"
+echo "Total files: $TOTAL_FILES"
 
-# Extract each tar file
-for tar_file in "$TAR_SOURCE_DIR"/*.tar; do
-    if [ -f "$tar_file" ]; then
-        echo "Extracting: $(basename "$tar_file")"
+# Process assigned files
+for (( i=$START_INDEX; i<=$END_INDEX; i++ )); do
+    if [ $i -lt $TOTAL_FILES ]; then
+        tar_file="${TAR_FILES[$i]}"
+        basename_file=$(basename "$tar_file")
         
-        # Extract with verbose output and preserve permissions
-        if tar -xvf "$tar_file"; then
-            extracted_files=$((extracted_files + 1))
-            echo "Successfully extracted: $(basename "$tar_file")"
+        echo "Extracting: $basename_file"
+        
+        if tar -xf "$tar_file" -C "$EXTRACT_DEST_DIR"; then
+            echo "SUCCESS: $basename_file"
         else
-            failed_files=$((failed_files + 1))
-            echo "ERROR: Failed to extract $(basename "$tar_file")" >&2
+            echo "ERROR: Failed to extract $basename_file" >&2
         fi
-        
-        # Show progress
-        echo "Progress: $extracted_files/$total_files extracted, $failed_files failed"
-        echo "---"
     fi
 done
 
-echo "Extraction completed at $(date)"
-echo "Summary:"
-echo "  Total files found: $total_files"
-echo "  Successfully extracted: $extracted_files"
-echo "  Failed extractions: $failed_files"
-
-# Show final disk usage
-echo "Final disk usage in destination:"
-du -sh "$EXTRACT_DEST_DIR"
+echo "Job array task $SLURM_ARRAY_TASK_ID completed at $(date)"
