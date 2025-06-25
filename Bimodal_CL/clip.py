@@ -968,7 +968,7 @@ def main(args):
         print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
 
         with open(
-            f"./pickle/key_class_mapping_validation_{args.num_clusters}_test.pkl", "wb"
+            f"./pickle/key_class_mapping_training_{args.num_clusters}_test.pkl", "wb"
         ) as f:
             pickle.dump(key_class_mapping, f)
 
