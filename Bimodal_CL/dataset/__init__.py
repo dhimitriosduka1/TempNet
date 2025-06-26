@@ -118,7 +118,7 @@ def create_val_dataset(
     if load_cc3m_val:
         return CC3M_Val_Dataset(
             ann_file=args.cc3m_ann_file,
-            img2cls_file=args.cc3m_img2cls_file,
+            img2cls_file=args.cc3m_img2cls_file_val,
             transform=test_transform,
             root=args.cc3m_val_root,
         )

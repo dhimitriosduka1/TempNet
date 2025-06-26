@@ -898,6 +898,8 @@ def main(args):
             idx = batch["idx"]
             text_idx = batch["text_idx"]
 
+            key = batch["key"]
+
             image = image.to(device, non_blocking=True)
             text_input = tokenizer(
                 text,
@@ -909,12 +911,15 @@ def main(args):
 
             with torch.no_grad():
                 image_feat, text_feat = model(
-                    image,
-                    text_input,
+                    image=image,
+                    augmented_image=None,
+                    text=text_input,
+                    augmented_text=None,
                     idx=idx,
                     text_idx=text_idx,
                     epoch=0,
                     max_epoch=0,
+                    args=args,
                     return_feat=True,
                 )
                 # image_feat = concat_all_gather(image_feat)
@@ -938,41 +943,45 @@ def main(args):
         # print("input shapes:", image_feats.shape, text_feats.shape)
         print("Input shapes:", text_feats.shape)
 
-        # kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
-        kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
+        for num_clusters in [18, 200]:
+            # kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
+            args.num_clusters = num_clusters
+            print(f"Number of clusters: {args.num_clusters}")
+            kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
 
-        # print("KMeans clustering for img feats...")
-        # kmeans_img.fit(image_feats)
+            # print("KMeans clustering for img feats...")
+            # kmeans_img.fit(image_feats)
 
-        print("KMeans clustering for txt feats...")
-        kmeans_txt.fit(text_feats)
-        labels = kmeans_txt.labels_
+            print("KMeans clustering for txt feats...")
+            kmeans_txt.fit(text_feats)
+            labels = kmeans_txt.labels_
 
-        # print(
-        #     "img labels:",
-        #     np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
-        # )
-        # txt_labels = np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1])
+            # print(
+            #     "img labels:",
+            #     np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
+            # )
+            # txt_labels = np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1])
 
-        # print(
-        #     "txt labels:",
-        #     txt_labels,
-        # )
+            # print(
+            #     "txt labels:",
+            #     txt_labels,
+            # )
 
-        print(f"Keys length: {len(keys)}, labels length: {len(labels)}")
+            print(f"Keys length: {len(keys)}, labels length: {len(labels)}")
 
-        key_class_mapping = {}
-        for i, key in enumerate(keys):
-            key_class_mapping[key] = labels[i]
+            key_class_mapping = {}
+            for i, key in enumerate(keys):
+                key_class_mapping[key] = labels[i]
 
-        print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
+            print(f"Length of unique keys: {len(set(key_class_mapping.keys()))}")
 
-        with open(
-            f"./pickle/key_class_mapping_training_{args.num_clusters}_test.pkl", "wb"
-        ) as f:
-            pickle.dump(key_class_mapping, f)
+            with open(
+                f"/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/key_class_mapping_training_{args.num_clusters}_test.pkl",
+                "wb",
+            ) as f:
+                pickle.dump(key_class_mapping, f)
 
-        print("Saved key_class_mapping")
+            print("Saved key_class_mapping")
 
         # img_centroids = kmeans_img.cluster_centers_
         # txt_centroids = kmeans_txt.cluster_centers_
@@ -1811,9 +1820,14 @@ if __name__ == "__main__":
         default=cm.get_config_for("cc3m_ann_file"),
     )
     parser.add_argument(
-        "--cc3m_img2cls_file",
-        default=cm.get_config_for("cc3m_img2cls_file"),
+        "--cc3m_img2cls_file_train",
+        default=cm.get_config_for("cc3m_img2cls_file_train"),
     )
+    parser.add_argument(
+        "--cc3m_img2cls_file_val",
+        default=cm.get_config_for("cc3m_img2cls_file_val"),
+    )
+
     parser.add_argument("--cc3m_val_root", default=cm.get_config_for("cc3m_val_root"))
     parser.add_argument("--captions_path", default=cm.get_config_for("captions_path"))
     parser.add_argument("--cc3m_extended_captions_path", default="")
@@ -1888,10 +1902,17 @@ if __name__ == "__main__":
 
     # /ptmp/dduka/work/data/cc3m/validation/cc3m_validation_key_class_mapping_18.pk !!!! The format of the file must be like this
     if args.number_of_classes != int(
-        args.cc3m_img2cls_file.split("/")[-1].split(".")[0].split("_")[-1]
+        args.cc3m_img2cls_file_val.split("/")[-1].split(".")[0].split("_")[-1]
     ):
         validation_errors.append(
-            "The number of classes in the cc3m_img2cls_file must match the number of classes in the pickle file."
+            "The number of classes in the cc3m_img2cls_file_val must match the number of classes in the pickle file."
+        )
+
+    if args.number_of_classes != int(
+        args.cc3m_img2cls_file_train.split("/")[-1].split(".")[0].split("_")[-1]
+    ):
+        validation_errors.append(
+            "The number of classes in the cc3m_img2cls_file_train must match the number of classes in the pickle file."
         )
 
     # TODO: Maybe add some more validations here

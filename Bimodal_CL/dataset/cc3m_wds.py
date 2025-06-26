@@ -108,12 +108,17 @@ def make_dataset_train(
             # Key is in the format shardindex_samplexxx_yyy => samplexxx_yyy
             # We need to remove the shardindex_ part
             return {k.split("_", 1)[1]: v for k, v in data.items()}
+        
+    def load_img2cls_train():
+        with open(args.cc3m_img2cls_file_train, "rb") as f:
+            return pickle.load(f)
 
     def make_sample_train(
         sample,
         extended_captions=None,
         enable_i2i_loss=False,
         enable_t2t_loss=False,
+        img2cls_train=None,
     ):
         key = sample["__key__"]
 
@@ -165,10 +170,12 @@ def make_dataset_train(
             "idx": idx,
             "text_idx": text_idx,
             "expert_image_embedding": expert_image_embedding,
+            "class_": img2cls_train[key],
         }
 
     captions = load_captions()
     img2idx = create_image_indexer(captions)
+    img2cls_train = load_img2cls_train()
 
     train_set = wds.WebDataset(
         urls=get_train_shards(base_path=args.cc3m_train_base_path),
@@ -191,6 +198,7 @@ def make_dataset_train(
                 extended_captions,
                 args.enable_i2i_loss,
                 args.enable_t2t_loss,
+                img2cls_train,
             )
         )
         .select(lambda x: x is not None)
