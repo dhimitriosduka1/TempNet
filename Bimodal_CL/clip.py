@@ -54,7 +54,13 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
-# import umap
+import wandb
+from global_step import GlobalStep
+
+from env_config.config_manager import ConfigManager
+
+# Get the config manager
+config_manager = ConfigManager()
 
 
 def train(
@@ -171,6 +177,15 @@ def train(
 
                 grad_scaler.update()
 
+                if utils.is_main_process():
+                    wandb.log(
+                        {
+                            "train/clip_loss": clip_loss.item(),
+                            "train/temp_loss": temp_loss.item(),
+                        },
+                        step=GlobalStep.get(),
+                    )
+
             else:
                 metric_logger.update(loss_ita=loss_term.item())
 
@@ -180,6 +195,14 @@ def train(
                 grad_scaler.step(optimizer)
 
                 grad_scaler.update()
+
+                if utils.is_main_process():
+                    wandb.log(
+                        {
+                            "train/loss": loss_term.item(),
+                        },
+                        step=GlobalStep.get(),
+                    )
 
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
@@ -199,6 +222,9 @@ def train(
 
         if epoch == 0 and i % step_size == 0 and i <= warmup_iterations:
             scheduler.step(i // step_size)
+
+        # Increment the step of wandb
+        GlobalStep.increment()
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -475,6 +501,27 @@ def concat_all_gather(tensor):
 def main(args):
     utils.init_distributed_mode(args)
 
+    if utils.is_main_process():
+        # Check if a run exists for the current experiment
+        run_id = None
+        wandb_run_id_path = os.path.join(args.output_dir, "wandb_id.json")
+        if os.path.exists(wandb_run_id_path):
+            with open(wandb_run_id_path, "r") as f:
+                run_id = json.load(f)["wandb_id"]
+
+        wandb.init(
+            project="Bimodal_CL_CC3M",
+            name=args.run_name,
+            resume="allow",
+            id=run_id,
+            config=args,
+            entity="dduka-max-planck-society",
+        )
+
+        # Save wandb run id to a file
+        with open(wandb_run_id_path, "w") as f:
+            json.dump({"wandb_id": wandb.run.id}, f)
+
     device = torch.device(args.device)
 
     # fix the seed for reproducibility
@@ -500,11 +547,11 @@ def main(args):
     val_flickr_dataset, test_flickr_dataset = create_val_dataset(
         "re", args, args.val_flickr_file, args.flickr_image_root, args.test_flickr_file
     )
-    sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
+    # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
-    print("len of sbu data:", len(sbu_dataset))
+    # print("len of sbu data:", len(sbu_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -552,9 +599,9 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
-    sbu_loader = create_val_loader(
-        [sbu_dataset], [None], [args.batch_size_test], [32], [None]
-    )[0]
+    # sbu_loader = create_val_loader(
+    #     [sbu_dataset], [None], [args.batch_size_test], [32], [None]
+    # )[0]
 
     if args.text_encoder == "roberta-large":
         tokenizer = RobertaTokenizer.from_pretrained(
@@ -1173,9 +1220,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100"]
     )
-    parser.add_argument("--data_path", default="/data/xxx/VLP")
-    parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
-    parser.add_argument("--train_image_root", default="cc3m")
+    parser.add_argument(
+        "--data_path", default=config_manager.get_config_for("data_path")
+    )
+    parser.add_argument(
+        "--train_file", default=config_manager.get_config_for("train_file")
+    )
+    parser.add_argument(
+        "--train_image_root", default=config_manager.get_config_for("train_image_root")
+    )
 
     # model config
     parser.add_argument("--bert_config", default="configs/config_bert.json")
@@ -1285,6 +1338,9 @@ if __name__ == "__main__":
     parser.add_argument("--find_clusters", action="store_true")
     parser.add_argument("--num_clusters", default=256, type=int)
 
+    # wandb
+    parser.add_argument("--run_name", required=True)
+
     args = parser.parse_args()
 
     if args.check_samples_tau:
@@ -1302,8 +1358,8 @@ if __name__ == "__main__":
     )
     args.flickr_image_root = os.path.join(args.data_path, "flickr30k")
 
-    args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
-    args.sbu_image_root = os.path.join(args.data_path, "sbu")
+    # args.sbu_file = os.path.join(args.data_path, "clip_train/sbu_train_new.json")
+    # args.sbu_image_root = os.path.join(args.data_path, "sbu")
 
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
