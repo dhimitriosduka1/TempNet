@@ -641,6 +641,10 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
                     "train/temp_weight_text_max": temp_weight_text.max(),
                     "train/temp_image_loss": temp_image_loss.item(),
                     "train/temp_text_loss": temp_text_loss.item(),
+                    "train/s_I_zero_elements": (self.s_I == 0.0).sum().item(),
+                    "train/s_T_zero_elements": (self.s_T == 0.0).sum().item(),
+                    "train/b_I_zero_elements": (self.b_I == 0.0).sum().item(),
+                    "train/b_T_zero_elements": (self.b_T == 0.0).sum().item(),
                 },
                 step=GlobalStep.get(),
             )
