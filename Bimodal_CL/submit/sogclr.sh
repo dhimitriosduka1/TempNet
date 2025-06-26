@@ -24,6 +24,7 @@ PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
 lr=8e-4
+data=cc3m
 desc=sogclr_baseline_pt_dataloader
 gamma=0.8
 
