@@ -26,7 +26,7 @@ cd "${PROJECT_DIR}"
 data=cc3m
 
 lr=8e-4
-desc=isogclr_tempnet_lr3e-5_exp09_M256
+desc=isogclr_tempnet_lr3e-5_exp09_M256_pt_dataloader
 gamma=0.8
 rho=7.0
 
