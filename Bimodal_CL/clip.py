@@ -612,12 +612,12 @@ def main(args):
             args.text_encoder, local_files_only=True
         )
 
-    #### Zero-shot transfer ####
-    zeroshot_dataloader = create_zeroshot_dataloader(
-        dataset_name=args.zs_dataset,
-        data_folder=args.zs_datafolder,
-        image_size=args.image_res,
-    )
+    # #### Zero-shot transfer ####
+    # zeroshot_dataloader = create_zeroshot_dataloader(
+    #     dataset_name=args.zs_dataset,
+    #     data_folder=args.zs_datafolder,
+    #     image_size=args.image_res,
+    # )
 
     #### Model ####
     print("Creating model")
@@ -1079,14 +1079,14 @@ def main(args):
             model_without_ddp, test_flickr_loader, tokenizer, device, args
         )
 
-        if args.evaluate:
-            zeroshot_results = zeroshot_transfer(
-                model_without_ddp,
-                zeroshot_dataloader,
-                args.zs_dataset,
-                tokenizer,
-                device,
-            )
+        # if args.evaluate:
+        #     zeroshot_results = zeroshot_transfer(
+        #         model_without_ddp,
+        #         zeroshot_dataloader,
+        #         args.zs_dataset,
+        #         tokenizer,
+        #         device,
+        #     )
 
         if utils.is_main_process():
 
@@ -1155,13 +1155,13 @@ def main(args):
                 with open(os.path.join(args.output_dir, "flickr_log.txt"), "a") as f:
                     f.write(json.dumps(log_stats) + "\n")
 
-                with open(
-                    os.path.join(
-                        args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
-                    ),
-                    "a",
-                ) as f:
-                    f.write(json.dumps(zeroshot_results) + "\n")
+                # with open(
+                #     os.path.join(
+                #         args.output_dir, f"zeroshot_{args.zs_dataset}_log.txt"
+                #     ),
+                #     "a",
+                # ) as f:
+                #     f.write(json.dumps(zeroshot_results) + "\n")
 
             else:
                 log_stats = {
@@ -1319,11 +1319,11 @@ if __name__ == "__main__":
     # visualize the prototypes
     parser.add_argument("--vis_prototypes", action="store_true")
 
-    # zero-shot transfer
-    parser.add_argument(
-        "--zs_dataset", required=True, choices=["cifar10", "cifar100", "imagenet"]
-    )
-    parser.add_argument("--zs_datafolder", default="./datasets", type=str)
+    # # zero-shot transfer
+    # parser.add_argument(
+    #     "--zs_dataset", required=True, choices=["cifar10", "cifar100", "imagenet"]
+    # )
+    # parser.add_argument("--zs_datafolder", default="./datasets", type=str)
 
     # arguments for bilevel tempnet
     parser.add_argument("--proto_std", default=10.0, type=float)
