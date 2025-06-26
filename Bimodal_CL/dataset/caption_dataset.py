@@ -1,5 +1,7 @@
 import json
 import os
+import torch
+import pickle
 import random
 import numpy as np
 
@@ -158,12 +160,15 @@ class re_train_dataset(Dataset):
         self.max_words = max_words
         self.img_ids = {}
 
+        print(f"==> Constructing image to caption mapping")
         n = 0
         for ann in self.ann:
             img_id = ann["image_id"]
             if img_id not in self.img_ids.keys():
                 self.img_ids[img_id] = n
                 n += 1
+
+        print(f"==> Image to caption mapping constructed")
 
     def __len__(self):
         return len(self.ann)
@@ -172,14 +177,20 @@ class re_train_dataset(Dataset):
         ann = self.ann[index]
         image_path = os.path.join(self.image_root, ann["image"])
 
-        image = Image.open(image_path).convert("RGB")
+        image_tensor = torch.load(image_path, map_location="cpu", weights_only=True)
+        image = Image.fromarray(image_tensor.numpy()).convert("RGB")
+
+        # Original code
+        # image = Image.open(image_path).convert("RGB")
 
         if enable_transform:
             image = self.transform(image)
         else:
             image = torchvision.transforms.ToTensor()(image)
 
-        caption = pre_caption(ann["caption"], self.max_words)
+        caption_path = os.path.join(self.image_root, ann["caption"])
+        caption = pickle.load(open(caption_path, "rb"))["caption"]
+        caption = pre_caption(caption, self.max_words)
 
         return image, caption, self.img_ids[ann["image_id"]], index
 
