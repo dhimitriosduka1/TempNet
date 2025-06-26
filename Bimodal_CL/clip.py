@@ -1105,21 +1105,32 @@ def main(args):
             )
             print("coco test:", test_result_coco)
 
-            if args.evaluate:
-                val_result_flickr = itm_eval(
-                    score_val_i2t_flickr,
-                    score_val_t2i_flickr,
-                    val_flickr_loader.dataset.txt2img,
-                    val_flickr_loader.dataset.img2txt,
-                )
-                print("flickr val:", val_result_flickr)
-                test_result_flickr = itm_eval(
-                    score_test_i2t_flickr,
-                    score_test_t2i_flickr,
-                    test_flickr_loader.dataset.txt2img,
-                    test_flickr_loader.dataset.img2txt,
-                )
-                print("flickr test:", test_result_flickr)
+            val_result_flickr = itm_eval(
+                score_val_i2t_flickr,
+                score_val_t2i_flickr,
+                val_flickr_loader.dataset.txt2img,
+                val_flickr_loader.dataset.img2txt,
+            )
+            print("flickr val:", val_result_flickr)
+            test_result_flickr = itm_eval(
+                score_test_i2t_flickr,
+                score_test_t2i_flickr,
+                test_flickr_loader.dataset.txt2img,
+                test_flickr_loader.dataset.img2txt,
+            )
+            print("flickr test:", test_result_flickr)
+
+            wandb.log(
+                {
+                    **{f"coco/val/{k}": v for k, v in val_result_coco.items()},
+                    **{f"coco/test/{k}": v for k, v in test_result_coco.items()},
+                    **{f"flickr/val/{k}": v for k, v in val_result_flickr.items()},
+                    **{
+                        f"flickr/test/{k}": v for k, v in test_result_flickr.items()
+                    },
+                },
+                step=GlobalStep.get(),
+            )
 
             # save tau for visualization
             if not args.evaluate and args.store_tau and (epoch + 1) % 10 == 0:
