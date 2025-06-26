@@ -10,6 +10,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
+import wandb
+import utils
+from global_step import GlobalStep
+
 
 # https://github.com/Spijkervet/SimCLR/blob/master/simclr/modules/gather.py
 class GatherLayer(torch.autograd.Function):
@@ -536,9 +540,6 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         tau_image = self.image_temp_gen(image_features.detach())
         tau_text = self.text_temp_gen(text_features.detach())
 
-        print(f"===> tau_image: {tau_image.min()}, max: {tau_image.max()}")
-        print(f"===> tau_text: {tau_text.min()}, max: {tau_text.max()}")
-
         # E_I(x_i)*E_T(t) - E_I(x_i)*E_T(t_i)
         image_diffs = sim - diag_sim[:, None]
         # E_I(x)*E_T(t_i) - E_I(x_i)*E_T(t_i)
@@ -563,9 +564,6 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
             torch.exp(text_diffs_d_temps - self.b_T[text_ids][None, :]) * mask_neg
         )
 
-        print(f"===> exp_image_diffs: {exp_image_diffs.min()}, max: {exp_image_diffs.max()}")
-        print(f"===> exp_text_diffs: {exp_text_diffs.min()}, max: {exp_text_diffs.max()}")
-
         g_I = torch.sum(exp_image_diffs, dim=1, keepdim=True)
         g_T = torch.sum(exp_text_diffs, dim=0, keepdim=True)
 
@@ -588,20 +586,11 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         s_I = s_I.clamp(min=self.eps)
         s_T = s_T.clamp(min=self.eps)
 
-        print(f"===> s_I: {s_I.min()}, max: {s_I.max()}")
-        print(f"===> s_T: {s_T.min()}, max: {s_T.max()}")
-
         weights_image = exp_image_diffs / s_I
         weights_text = exp_text_diffs / s_T
 
-        print(f"===> weights_image: {weights_image.min()}, max: {weights_image.max()}")
-        print(f"===> weights_text: {weights_text.min()}, max: {weights_text.max()}")
-
         image_loss = torch.sum(weights_image * image_diffs, dim=1, keepdim=True)
         text_loss = torch.sum(weights_text * text_diffs, dim=0, keepdim=True)
-
-        print(f"===> image_loss: {image_loss.min()}, max: {image_loss.max()}")
-        print(f"===> text_loss: {text_loss.min()}, max: {text_loss.max()}")
 
         clip_loss = image_loss.mean() + text_loss.mean()
 
@@ -621,17 +610,40 @@ class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
         temp_image_loss = torch.mean(temp_weight_image * tau_image[:, None])
         temp_text_loss = torch.mean(temp_weight_text * tau_text[None, :])
 
-        print(
-            f"===> temp_weight_image: {temp_weight_image.min()}, max: {temp_weight_image.max()}"
-        )
-        print(
-            f"===> temp_weight_text: {temp_weight_text.min()}, max: {temp_weight_text.max()}"
-        )
-        print(
-            f"===> temp_image_loss: {temp_image_loss.item()}, temp_text_loss: {temp_text_loss.item()}"
-        )
-
         temp_loss = temp_image_loss + temp_text_loss
+
+        if utils.is_main_process():
+            wandb.log(
+                {
+                    "train/tau_image_min": tau_image.min(),
+                    "train/tau_image_max": tau_image.max(),
+                    "train/tau_text_min": tau_text.min(),
+                    "train/tau_text_max": tau_text.max(),
+                    "train/exp_image_diffs_min": exp_image_diffs.min(),
+                    "train/exp_image_diffs_max": exp_image_diffs.max(),
+                    "train/exp_text_diffs_min": exp_text_diffs.min(),
+                    "train/exp_text_diffs_max": exp_text_diffs.max(),
+                    "train/s_I_min": s_I.min(),
+                    "train/s_I_max": s_I.max(),
+                    "train/s_T_min": s_T.min(),
+                    "train/s_T_max": s_T.max(),
+                    "train/weights_image_min": weights_image.min(),
+                    "train/weights_image_max": weights_image.max(),
+                    "train/weights_text_min": weights_text.min(),
+                    "train/weights_text_max": weights_text.max(),
+                    "train/image_loss_min": image_loss.min(),
+                    "train/image_loss_max": image_loss.max(),
+                    "train/text_loss_min": text_loss.min(),
+                    "train/text_loss_max": text_loss.max(),
+                    "train/temp_weight_image_min": temp_weight_image.min(),
+                    "train/temp_weight_image_max": temp_weight_image.max(),
+                    "train/temp_weight_text_min": temp_weight_text.min(),
+                    "train/temp_weight_text_max": temp_weight_text.max(),
+                    "train/temp_image_loss": temp_image_loss.item(),
+                    "train/temp_text_loss": temp_text_loss.item(),
+                },
+                step=GlobalStep.get(),
+            )
 
         return (
             (clip_loss, temp_loss),
