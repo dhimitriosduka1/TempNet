@@ -58,6 +58,7 @@ import wandb
 from global_step import GlobalStep
 
 from env_config.config_manager import ConfigManager
+from itertools import chain
 
 # Get the config manager
 config_manager = ConfigManager()
@@ -682,11 +683,14 @@ def main(args):
                 )
                 image_feat = concat_all_gather(image_feat)
                 text_feat = concat_all_gather(text_feat)
-                key = concat_all_gather(key)
+
+                gathered_keys = [[] for _ in range(torch.distributed.get_world_size())]
+                torch.distributed.all_gather_object(gathered_keys, key)
+                key = list(chain(*gathered_keys))
 
             image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
-            keys.extend(key.cpu().tolist())
+            keys.extend(key)
 
         image_feats = torch.cat(image_feats, dim=0).numpy()
         text_feats = torch.cat(text_feats, dim=0).numpy()
