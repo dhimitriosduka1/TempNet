@@ -704,7 +704,7 @@ def main(args):
         for num_cluster in [18, 200]:
             print(f"Running KMeans with {num_cluster} clusters...")
             args.num_clusters = num_cluster
-            save_dir = f"/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/key_class_mapping_training_{args.num_clusters}.pkl"
+            save_dir = f"/ptmp/dduka/work/data/cc3m/training/key_class_mapping_training_{args.num_clusters}.pkl"
 
             kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
 

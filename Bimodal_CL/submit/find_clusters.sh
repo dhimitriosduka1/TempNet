@@ -1,21 +1,27 @@
-#!/bin/bash
+#!/bin/bash -l
 
-#SBATCH --job-name cc3m
-#SBATCH --partition gpu20
+#SBATCH -o /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
+#SBATCH -e /ptmp/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
 
-#SBATCH --time=11:59:00
+#SBATCH --job-name bcl
 
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks=1
+#SBATCH --constraint="gpu"
+
 #SBATCH --gres=gpu:4
+#SBATCH --mem=480000
 
-#SBATCH -o /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
-#SBATCH -e /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
+#SBATCH --time=23:59:59
 
-export mpi=1
-PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
+module purge
+module load anaconda/3/2023.03
+
+conda activate bimodal_cl
+
+export mpcdf=1
+
+PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
-
 
 DATA=cc3m
 LR=8e-4
