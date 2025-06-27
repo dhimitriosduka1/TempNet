@@ -26,7 +26,7 @@ cd "${PROJECT_DIR}"
 DATA=cc3m
 LR=8e-4
 ITA_TYPE=clip
-DESC=find_clusters
+DESC=find_clusters_18_and_200
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
