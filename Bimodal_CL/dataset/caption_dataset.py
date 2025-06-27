@@ -192,7 +192,13 @@ class re_train_dataset(Dataset):
         caption = pickle.load(open(caption_path, "rb"))["caption"]
         caption = pre_caption(caption, self.max_words)
 
-        return image, caption, self.img_ids[ann["image_id"]], index
+        return {
+            "image": image,
+            "caption": caption,
+            "idx": self.img_ids[ann["image_id"]],
+            "text_idx": index,
+            "key": ann["image_id"],
+        }
 
 
 class re_eval_dataset(Dataset):

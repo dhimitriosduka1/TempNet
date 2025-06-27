@@ -124,20 +124,18 @@ def train(
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
-    for i, (image, text, idx, text_idx) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
-    ):
+    for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         if optimizer_tempnet is not None:
             optimizer_tempnet.param_groups[0]["lr"] = (
                 args.lr_temp_net * 0.9**epoch
             )  # exp decay
 
-        image = image.to(device, non_blocking=True)
-        idx = idx.to(device, non_blocking=True)
-        text_idx = text_idx.to(device, non_blocking=True)
+        image = batch["image"].to(device, non_blocking=True)
+        idx = batch["idx"].to(device, non_blocking=True)
+        text_idx = batch["text_idx"].to(device, non_blocking=True)
         text_input = tokenizer(
-            text,
+            batch["caption"],
             padding="max_length",
             truncation=True,
             max_length=30,
@@ -654,18 +652,23 @@ def main(args):
 
         image_feats = []
         text_feats = []
+        keys = []
 
         print("generating features...")
-        for i, (image, text, idx, text_idx) in enumerate(train_loader):
+        for i, batch in enumerate(train_loader):
 
-            image = image.to(device, non_blocking=True)
+            image = batch["image"].to(device, non_blocking=True)
             text_input = tokenizer(
-                text,
+                batch["caption"],
                 padding="max_length",
                 truncation=True,
                 max_length=30,
                 return_tensors="pt",
             ).to(device)
+
+            idx = batch["idx"]
+            text_idx = batch["text_idx"]
+            key = batch["key"]
 
             with torch.no_grad():
                 image_feat, text_feat = model(
@@ -679,9 +682,11 @@ def main(args):
                 )
                 image_feat = concat_all_gather(image_feat)
                 text_feat = concat_all_gather(text_feat)
+                key = concat_all_gather(key)
 
             image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
+            keys.extend(key.cpu().tolist())
 
         image_feats = torch.cat(image_feats, dim=0).numpy()
         text_feats = torch.cat(text_feats, dim=0).numpy()
@@ -689,40 +694,40 @@ def main(args):
         print(np.mean(image_feats), np.mean(text_feats))
 
         print("input shapes:", image_feats.shape, text_feats.shape)
+        print("len of keys:", len(keys))
+        print(f"len of unique keys: {len(set(keys))}")
 
-        kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
-        kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
+        for num_cluster in [18, 200]:
+            print(f"Running KMeans with {num_cluster} clusters...")
+            args.num_clusters = num_cluster
+            save_dir = f"/BS/dduka/work/projects/TempNet/Bimodal_CL/pickle/key_class_mapping_training_{args.num_clusters}.pkl"
 
-        print("KMeans clustering for img feats...")
-        kmeans_img.fit(image_feats)
+            kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
 
-        print("KMeans clustering for txt feats...")
-        kmeans_txt.fit(text_feats)
+            print("KMeans clustering for txt feats...")
+            kmeans_txt.fit(text_feats)
+            labels = kmeans_txt.labels_
 
-        print(
-            "img labels:",
-            np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
-        )
-        print(
-            "txt labels:",
-            np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1]),
-        )
+            key_class_mapping = {key: label for key, label in zip(keys, labels)}
 
-        img_centroids = kmeans_img.cluster_centers_
-        txt_centroids = kmeans_txt.cluster_centers_
+            with open(save_dir, "wb") as f:
+                json.dump(key_class_mapping, f)
 
-        print(
-            "img centroids:",
-            img_centroids,
-            np.mean(img_centroids),
-            np.std(img_centroids),
-        )
-        print(
-            "txt centroids:",
-            txt_centroids,
-            np.mean(txt_centroids),
-            np.std(txt_centroids),
-        )
+            print(
+                "txt labels:",
+                np.sort(
+                    np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1]
+                ),
+            )
+
+            txt_centroids = kmeans_txt.cluster_centers_
+
+            print(
+                "txt centroids:",
+                txt_centroids,
+                np.mean(txt_centroids),
+                np.std(txt_centroids),
+            )
 
         assert 0
 
@@ -1125,9 +1130,7 @@ def main(args):
                     **{f"coco/val/{k}": v for k, v in val_result_coco.items()},
                     **{f"coco/test/{k}": v for k, v in test_result_coco.items()},
                     **{f"flickr/val/{k}": v for k, v in val_result_flickr.items()},
-                    **{
-                        f"flickr/test/{k}": v for k, v in test_result_flickr.items()
-                    },
+                    **{f"flickr/test/{k}": v for k, v in test_result_flickr.items()},
                 },
                 step=GlobalStep.get(),
             )
