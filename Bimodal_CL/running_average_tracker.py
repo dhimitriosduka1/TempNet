@@ -37,6 +37,11 @@ class RunningAverageTracker:
         else:
             scalar_value = float(value)
 
+        # Check for NaN or infinite values
+        if not (np.isfinite(scalar_value)):
+            print(f"Warning: {self.name} received non-finite value: {scalar_value}. Skipping update.")
+            return self.ema if self.ema is not None else 0.0
+
         # Update EMA
         if self.ema is None:
             self.ema = scalar_value
