@@ -39,12 +39,11 @@ def generate_data(source_folder, target_folder, target_class):
     for key, _ in labels.items():
         f.append(f"{key}.tar")
 
-    for ids, dirs in enumerate(tqdm(os.listdir(source_folder))):
-        # Check if the directory is in the labels
-        if dirs in f:
-            print("{} is transferred".format(dirs))
-            shutil.copytree(
-                os.path.join(source_folder, dirs), os.path.join(target_folder, dirs)
+    for idx, file in enumerate(tqdm(os.listdir(source_folder))):
+        if file in f and file.endswith(".tar"):
+            print(f"{file} is transferred")
+            shutil.copy2(
+                os.path.join(source_folder, file), os.path.join(target_folder, file)
             )
 
 
