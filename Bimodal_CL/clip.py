@@ -149,7 +149,10 @@ def train(
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
-    period = (args.epochs * data_loader.batches_per_epoch) / 5.0
+    if args.data == "imagenet100":
+        period = (args.epochs * len(data_loader)) / 5.0
+    else:
+        period = (args.epochs * data_loader.batches_per_epoch) / 5.0
 
     for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         images = batch["image"]
