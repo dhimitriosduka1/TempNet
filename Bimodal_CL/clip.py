@@ -1884,7 +1884,7 @@ if __name__ == "__main__":
                 "If --temperature_scheduler is 'cos_aug', either --enable_i2i_loss and/or --enable_t2t_loss must be set."
             )
 
-    if args.enable_t2t_loss:
+    if args.enable_t2t_loss and args.data == "cc3m":
         if not args.cc3m_extended_captions_path:
             validation_errors.append(
                 "--cc3m_extended_captions_path must be provided when --enable_t2t_loss is set."
