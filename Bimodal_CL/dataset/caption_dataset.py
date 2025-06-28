@@ -134,8 +134,12 @@ class ImageNet100Dataset(ImageFolder):
                 np.savetxt(f, self.noise_sample_idx)
 
     def __getitem__(self, index):
-        # Get image and label
-        image, label_idx = super().__getitem__(index)
+        path, label_idx = self.samples[index]
+        original_image = self.loader(path)
+
+        if self.transform is not None:
+            image = self.transform(original_image)
+            augmented_image = self.transform(original_image)
 
         if index in self.noise_sample_idx:
             class_name = random.choice(
@@ -146,8 +150,20 @@ class ImageNet100Dataset(ImageFolder):
 
         # Generate text label
         text = random.choice(imagenet_templates).format(class_name)
+        augmented_text = random.choice(imagenet_templates).format(class_name)
 
-        return image, text, index, index
+        return {
+            "image": image,
+            "augmented_image": augmented_image,
+            "caption": text,
+            "augmented_caption": augmented_text,
+            "key": None,
+            "idx": index,
+            "text_idx": index,
+            "expert_image_embedding": None,
+            "class_": None,
+            "superclass_": None,
+        }
 
 
 class re_train_dataset(Dataset):
