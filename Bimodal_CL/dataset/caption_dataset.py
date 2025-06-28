@@ -157,7 +157,7 @@ class ImageNet100Dataset(ImageFolder):
             "augmented_image": augmented_image,
             "caption": text,
             "augmented_caption": augmented_text,
-            "key": None,
+            "key": index,
             "idx": index,
             "text_idx": index,
             "expert_image_embedding": None,
