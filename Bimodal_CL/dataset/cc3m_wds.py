@@ -108,7 +108,7 @@ def make_dataset_train(
             # Key is in the format shardindex_samplexxx_yyy => samplexxx_yyy
             # We need to remove the shardindex_ part
             return {k.split("_", 1)[1]: v for k, v in data.items()}
-        
+
     def load_img2cls_train():
         with open(args.cc3m_img2cls_file_train, "rb") as f:
             return pickle.load(f)

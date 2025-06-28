@@ -879,7 +879,6 @@ def main(args):
     if args.find_clusters:
         model.eval()
 
-        # image_feats = []
         text_feats = []
         keys = []
 
@@ -914,7 +913,6 @@ def main(args):
                     args=args,
                     return_feat=True,
                 )
-                # image_feat = concat_all_gather(image_feat)
                 text_feat = concat_all_gather(text_feat)
 
                 gathered_keys = [[] for _ in range(torch.distributed.get_world_size())]
@@ -922,43 +920,24 @@ def main(args):
                 torch.distributed.all_gather_object(gathered_keys, key)
                 key = list(chain(*gathered_keys))
 
-            # image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
             keys.extend(key)
 
-        # image_feats = torch.cat(image_feats, dim=0).numpy()
         text_feats = torch.cat(text_feats, dim=0).numpy()
 
-        # print(np.mean(image_feats), np.mean(text_feats))
         print(f"Text features mean: {np.mean(text_feats)}")
 
-        # print("input shapes:", image_feats.shape, text_feats.shape)
         print("Input shapes:", text_feats.shape)
 
         for num_clusters in [18, 200]:
-            # kmeans_img = KMeans(n_clusters=args.num_clusters, random_state=0)
             args.num_clusters = num_clusters
             print(f"Number of clusters: {args.num_clusters}")
             kmeans_txt = KMeans(n_clusters=args.num_clusters, random_state=0)
 
-            # print("KMeans clustering for img feats...")
-            # kmeans_img.fit(image_feats)
-
             print("KMeans clustering for txt feats...")
             kmeans_txt.fit(text_feats)
             labels = kmeans_txt.labels_
-
-            # print(
-            #     "img labels:",
-            #     np.sort(np.unique(kmeans_img.predict(image_feats), return_counts=True)[1]),
-            # )
-            # txt_labels = np.sort(np.unique(kmeans_txt.predict(text_feats), return_counts=True)[1])
-
-            # print(
-            #     "txt labels:",
-            #     txt_labels,
-            # )
-
+            
             print(f"Keys length: {len(keys)}, labels length: {len(labels)}")
 
             key_class_mapping = {}
@@ -974,23 +953,6 @@ def main(args):
                 pickle.dump(key_class_mapping, f)
 
             print("Saved key_class_mapping")
-
-        # img_centroids = kmeans_img.cluster_centers_
-        # txt_centroids = kmeans_txt.cluster_centers_
-
-        # print(
-        #     "img centroids:",
-        #     img_centroids,
-        #     np.mean(img_centroids),
-        #     np.std(img_centroids),
-        # )
-
-        # print(
-        #     "txt centroids:",
-        #     txt_centroids,
-        #     np.mean(txt_centroids),
-        #     np.std(txt_centroids),
-        # )
 
         return
 
