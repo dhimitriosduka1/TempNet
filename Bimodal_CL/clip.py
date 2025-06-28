@@ -163,6 +163,9 @@ def train(
 
         expert_image_embedding = batch["expert_image_embedding"]
 
+        classes = batch["class_"]
+        superclasses = batch["superclass_"]
+
         if i % 500 == 0:
             model.eval()
             (
@@ -283,6 +286,20 @@ def train(
 
                         log_obj["train/loss"] = clip_loss
                         log_obj["train/temp_loss"] = temp_loss
+
+                    train_cluster_stats = train_stats_evaluator.evaluate(
+                        image_features=info_dict["image_features"],
+                        text_features=info_dict["text_features"],
+                        classes=classes,
+                        superclasses=superclasses,
+                        gather=True,
+                    )
+
+                    train_cluster_stats = train_stats_evaluator.format(
+                        train_cluster_stats, prefix="cc3m/train"
+                    )
+
+                    log_obj.update(train_cluster_stats)
 
                     wandb.log(log_obj, step=GlobalStep.get())
 
@@ -937,7 +954,7 @@ def main(args):
             print("KMeans clustering for txt feats...")
             kmeans_txt.fit(text_feats)
             labels = kmeans_txt.labels_
-            
+
             print(f"Keys length: {len(keys)}, labels length: {len(labels)}")
 
             key_class_mapping = {}
@@ -1940,6 +1957,13 @@ if __name__ == "__main__":
         running_average_trackers[f"superclass_{i}"] = average_tracker_template
 
     stats_evaluator = MMStatsEvaluator(
+        world_size=args.world_size,
+        running_average_trackers=running_average_trackers,
+        temperature=args.temp,
+        alpha=args.sim_based_loss_alpha,
+    )
+
+    train_stats_evaluator = MMStatsEvaluator(
         world_size=args.world_size,
         running_average_trackers=running_average_trackers,
         temperature=args.temp,

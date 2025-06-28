@@ -78,6 +78,29 @@ def load_image_embedding(vision_embeddings_base_path, key):
     return np.load(embedding_path)["embedding"].astype(np.float32)
 
 
+def setup_superclasses(img2cls):
+    # Create a mapping from class to superclass
+    # 0 -> head class
+    # 1 -> mid class
+    # 2 -> tail class
+    counter = Counter(img2cls.values()).most_common()
+    classes = [int(class_) for class_, _ in counter]
+
+    assert len(classes) % 3 == 0, "Number of classes should be divisible by 3"
+
+    interval = len(classes) // 3
+    superclasses = {}
+    for i, class_ in enumerate(classes):
+        if i < interval:
+            superclasses[class_] = 0
+        elif i < 2 * interval:
+            superclasses[class_] = 1
+        else:
+            superclasses[class_] = 2
+
+    return superclasses
+
+
 def make_dataset_train(
     transform,
     args,
@@ -119,6 +142,7 @@ def make_dataset_train(
         enable_i2i_loss=False,
         enable_t2t_loss=False,
         img2cls_train=None,
+        cls2supercls=None,
     ):
         key = sample["__key__"]
 
@@ -160,6 +184,8 @@ def make_dataset_train(
             augmented_image = transform(image)
 
         idx = text_idx = img2idx[key]
+        class_ = img2cls_train[key]
+        superclass_ = cls2supercls[class_]
 
         return {
             "image": base_image,
@@ -170,12 +196,14 @@ def make_dataset_train(
             "idx": idx,
             "text_idx": text_idx,
             "expert_image_embedding": expert_image_embedding,
-            "class_": img2cls_train[key],
+            "class_": class_,
+            "superclass_": superclass_,
         }
 
     captions = load_captions()
     img2idx = create_image_indexer(captions)
     img2cls_train = load_img2cls_train()
+    cls2supercls = setup_superclasses(img2cls_train)
 
     train_set = wds.WebDataset(
         urls=get_train_shards(base_path=args.cc3m_train_base_path),
@@ -199,6 +227,7 @@ def make_dataset_train(
                 args.enable_i2i_loss,
                 args.enable_t2t_loss,
                 img2cls_train,
+                cls2supercls,
             )
         )
         .select(lambda x: x is not None)
@@ -275,7 +304,7 @@ class CC3M_Val_Dataset(Dataset):
         self.img2cls_file = img2cls_file
 
         self.img2cls = pickle.load(open(self.img2cls_file, "rb"))
-        self.cls2supercls = self._setup_superclasses(self.img2cls)
+        self.cls2supercls = setup_superclasses(self.img2cls)
 
         self.text = []
         self.image = []
@@ -331,25 +360,3 @@ class CC3M_Val_Dataset(Dataset):
             "index": index,
             "key": image_id,
         }
-
-    def _setup_superclasses(self, img2cls):
-        # Create a mapping from class to superclass
-        # 0 -> head class
-        # 1 -> mid class
-        # 2 -> tail class
-        counter = Counter(img2cls.values()).most_common()
-        classes = [int(class_) for class_, _ in counter]
-
-        assert len(classes) % 3 == 0, "Number of classes should be divisible by 3"
-
-        interval = len(classes) // 3
-        superclasses = {}
-        for i, class_ in enumerate(classes):
-            if i < interval:
-                superclasses[class_] = 0
-            elif i < 2 * interval:
-                superclasses[class_] = 1
-            else:
-                superclasses[class_] = 2
-
-        return superclasses
