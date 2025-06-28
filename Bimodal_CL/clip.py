@@ -56,6 +56,7 @@ from sklearn.preprocessing import StandardScaler
 
 import wandb
 from global_step import GlobalStep
+from tqdm import tqdm
 
 from env_config.config_manager import ConfigManager
 from itertools import chain
@@ -656,8 +657,7 @@ def main(args):
         keys = []
 
         print("generating features...")
-        for i, batch in enumerate(train_loader):
-
+        for batch in tqdm(train_loader, total=len(train_loader)):
             image = batch["image"].to(device, non_blocking=True)
             text_input = tokenizer(
                 batch["caption"],
@@ -734,7 +734,7 @@ def main(args):
                 np.std(txt_centroids),
             )
 
-        exit(0)
+        return
 
     if len(args.checkpoint) > 0:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
