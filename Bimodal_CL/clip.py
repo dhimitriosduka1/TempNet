@@ -228,7 +228,10 @@ def train(
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
-                global_it = epoch * data_loader.batches_per_epoch + i
+                if args.data == "imagenet100":
+                    global_it = epoch * len(data_loader) + i
+                else:
+                    global_it = epoch * data_loader.batches_per_epoch + i
 
                 if args.temperature_scheduler in ["cos", "cos_aug", "fixed"]:
                     # Get next temperature
