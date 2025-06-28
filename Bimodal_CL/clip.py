@@ -858,6 +858,11 @@ def main(args):
             image_size=args.image_res,
         )
 
+    if args.data == "imagenet100":
+        total_steps = args.epochs * len(train_dataset)
+    else:
+        total_steps = args.epochs * train_loader.batches_per_epoch
+
     #### Model ####
     print("Creating model")
     model = CLIP(
@@ -883,7 +888,7 @@ def main(args):
         sinkhorn_eps=args.sinkhorn_eps,
         swav_temp=args.swav_temp,
         swav_weight=args.swav_weight,
-        total_steps=args.epochs * train_loader.batches_per_epoch,
+        total_steps=total_steps,
         sim_based_loss_alpha=args.sim_based_loss_alpha,
         sim_blend_ratio=args.sim_blend_ratio,
         clip_scheduled_loss_type=args.clip_scheduled_loss_type,
