@@ -610,7 +610,10 @@ class CLIP(nn.Module):
         else:
             raise NotImplementedError
 
-        return loss_ita, info_dict
+        return loss_ita, info_dict | {
+            "image_features": image_feat,
+            "text_features": text_feat,
+        }
 
 
 @torch.no_grad()
