@@ -688,6 +688,9 @@ def main(args):
                 torch.distributed.all_gather_object(gathered_keys, key)
                 key = list(chain(*gathered_keys))
 
+            if i == 10:
+                break
+
             image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
             keys.extend(key)
@@ -714,8 +717,9 @@ def main(args):
 
             key_class_mapping = {key: label for key, label in zip(keys, labels)}
 
+            # Save the class mapping as a pickle file
             with open(save_dir, "wb") as f:
-                json.dump(key_class_mapping, f)
+                pickle.dump(key_class_mapping, f)
 
             print(
                 "txt labels:",
