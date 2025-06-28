@@ -3,7 +3,7 @@ import json
 import os
 import random
 import numpy as np
-
+import torch
 from torch.utils.data import Dataset
 import torchvision
 import webdataset as wds
@@ -160,9 +160,9 @@ class ImageNet100Dataset(ImageFolder):
             "key": index,
             "idx": index,
             "text_idx": index,
-            "expert_image_embedding": None,
-            "class_": None,
-            "superclass_": None,
+            "expert_image_embedding": torch.zeros(4),  # Placeholder
+            "class_": label_idx,
+            "superclass_": label_idx,
         }
 
 
