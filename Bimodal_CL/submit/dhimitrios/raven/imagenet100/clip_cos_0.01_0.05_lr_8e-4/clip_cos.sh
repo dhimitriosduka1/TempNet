@@ -43,3 +43,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --temperature_scheduler cos \
     --tau_min $TAU_MIN \
     --tau_max $TAU_MAX \
+    --train_image_root /ptmp/dduka/work/data/imagenet100/ \
