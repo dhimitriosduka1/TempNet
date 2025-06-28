@@ -133,6 +133,7 @@ def make_dataset_train(
             return {k.split("_", 1)[1]: v for k, v in data.items()}
 
     def load_img2cls_train():
+        print(f"Loading img2cls_train from {args.cc3m_img2cls_file_train}")
         with open(args.cc3m_img2cls_file_train, "rb") as f:
             return pickle.load(f)
 

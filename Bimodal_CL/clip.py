@@ -287,19 +287,20 @@ def train(
                         log_obj["train/loss"] = clip_loss
                         log_obj["train/temp_loss"] = temp_loss
 
-                    train_cluster_stats = train_stats_evaluator.evaluate(
-                        image_features=info_dict["image_features"],
-                        text_features=info_dict["text_features"],
-                        classes=classes,
-                        superclasses=superclasses,
-                        gather=True,
-                    )
+                    if args.enable_cluster_stats_train:
+                        train_cluster_stats = train_stats_evaluator.evaluate(
+                            image_features=info_dict["image_features"],
+                            text_features=info_dict["text_features"],
+                            classes=classes,
+                            superclasses=superclasses,
+                            gather=True,
+                        )
 
-                    train_cluster_stats = train_stats_evaluator.format(
-                        train_cluster_stats, prefix="cc3m/train"
-                    )
+                        train_cluster_stats = train_stats_evaluator.format(
+                            train_cluster_stats, prefix="cc3m/train"
+                        )
 
-                    log_obj.update(train_cluster_stats)
+                        log_obj.update(train_cluster_stats)
 
                     wandb.log(log_obj, step=GlobalStep.get())
 
@@ -546,7 +547,7 @@ def evaluation(model, data_loader, tokenizer, device, args, dataset_name):
     image_embeds = torch.cat(image_embeds, dim=0)
 
     stats = {}
-    if dataset_name == "cc3m":
+    if dataset_name == "cc3m" and args.enable_cluster_stats_val:
         classes = torch.cat(classes, dim=0)
         superclasses = torch.cat(superclasses, dim=0)
 
@@ -1847,6 +1848,10 @@ if __name__ == "__main__":
 
     parser.add_argument("--number_of_classes", default=18, type=int)
     parser.add_argument("--number_of_superclasses", default=3, type=int)
+
+    # For cluster stats
+    parser.add_argument("--enable_cluster_stats_train", action="store_true")
+    parser.add_argument("--enable_cluster_stats_val", action="store_true")
 
     args = parser.parse_args()
 
