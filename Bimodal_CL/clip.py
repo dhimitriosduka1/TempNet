@@ -687,10 +687,7 @@ def main(args):
                 gathered_keys = [[] for _ in range(torch.distributed.get_world_size())]
                 torch.distributed.all_gather_object(gathered_keys, key)
                 key = list(chain(*gathered_keys))
-
-            if i == 10:
-                break
-
+                
             image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
             keys.extend(key)
@@ -737,7 +734,7 @@ def main(args):
                 np.std(txt_centroids),
             )
 
-        assert 0
+        exit(0)
 
     if len(args.checkpoint) > 0:
         checkpoint = torch.load(args.checkpoint, map_location="cpu")
