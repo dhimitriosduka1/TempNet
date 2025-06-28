@@ -39,6 +39,15 @@ from itertools import chain
 
 import utils
 import shutil
+
+from dataset import (
+    create_train_dataset,
+    create_val_dataset,
+    create_sampler,
+    create_train_loader,
+    create_val_loader,
+)
+
 from dataset import (
     create_train_dataset,
     create_val_dataset,
@@ -718,9 +727,10 @@ def main(args):
     else:
         train_dataset = create_train_dataset("imagenet100", args)
 
-    # DD
-    # args.data_number = len(train_dataset)
-    args.data_number = get_train_dataset_size()
+    if args.data == "imagenet100":
+        args.data_number = len(train_dataset)
+    else:
+        args.data_number = get_train_dataset_size()
 
     val_coco_dataset, test_coco_dataset = create_val_dataset(
         "re", args, args.val_coco_file, args.coco_image_root, args.test_coco_file
@@ -745,8 +755,6 @@ def main(args):
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     print("len of cc3m val:", get_val_dataset_size())
 
-    # print("len of sbu data:", len(sbu_dataset))
-
     if args.extract_data:
         idx_list = []
         data_dir = os.path.join(args.output_dir, "high_images")
@@ -762,27 +770,26 @@ def main(args):
 
         assert 0
 
-    # num_training = int(args.train_frac * len(train_dataset))
-    # train_dataset = Subset(train_dataset, list(range(num_training)))
+    if args.data == "imagenet100":
+        if args.distributed:
+            num_tasks = utils.get_world_size()
+            global_rank = utils.get_rank()
+            samplers = create_sampler(
+                [train_dataset], [True], num_tasks, global_rank
+            ) + [
+                None,
+                None,
+            ]
+        else:
+            samplers = [None, None, None]
 
-    # if args.distributed:
-    #     num_tasks = utils.get_world_size()
-    #     global_rank = utils.get_rank()
-    #     samplers = create_sampler([train_dataset], [True], num_tasks, global_rank) + [
-    #         None,
-    #         None,
-    #     ]
-    # else:
-    #     samplers = [None, None, None]
-
-    # DD
-    # train_loader = create_train_loader(
-    #     train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
-    # )
-
-    train_loader = make_dataloader_train(
-        trainset=train_dataset, batch_size=args.batch_size_train, num_workers=8
-    )
+        train_loader = create_train_loader(
+            train_dataset, samplers[0], args.batch_size_train, 8, None, drop_last=False
+        )
+    else:
+        train_loader = make_dataloader_train(
+            trainset=train_dataset, batch_size=args.batch_size_train, num_workers=8
+        )
 
     val_coco_loader, test_coco_loader = create_val_loader(
         [val_coco_dataset, test_coco_dataset],
@@ -807,21 +814,6 @@ def main(args):
         [8],
         [None],
     )[0]
-
-    # val_cc3m_loader = torch.utils.data.DataLoader(
-    #     dataset=val_cc3m_dataset,
-    #     batch_size=args.batch_size_test,
-    #     num_workers=8,
-    #     sampler=torch.utils.data.distributed.DistributedSampler(
-    #         val_cc3m_dataset, shuffle=False, drop_last=False
-    #     ),
-    #     pin_memory=True,
-    # )
-
-    # DD
-    # sbu_loader = create_val_loader(
-    #     [sbu_dataset], [None], [args.batch_size_test], [32], [None]
-    # )[0]
 
     if args.text_encoder == "roberta-large":
         tokenizer = RobertaTokenizer.from_pretrained(
@@ -1408,6 +1400,9 @@ def main(args):
 
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
+
+        if args.data == "imagenet100" and args.distributed:
+            train_loader.sampler.set_epoch(epoch)
 
         start_epoch_time = time.time()
 
