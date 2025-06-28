@@ -170,11 +170,11 @@ def train(
         superclasses = batch["superclass_"]
 
         if args.data == "imagenet100":
-            freq = 100
+            eval_freq = 100
         else:
-            freq = 500
+            eval_freq = 500
 
-        if i % freq == 0:
+        if i % eval_freq == 0:
             model.eval()
             (
                 val_result_coco,
@@ -1360,7 +1360,11 @@ def main(args):
         if "epoch" in checkpoint:
             args.start_epoch = checkpoint["epoch"] + 1
 
-            step = args.start_epoch * train_loader.batches_per_epoch
+            if args.data == "imagenet100":
+                step = args.start_epoch * len(train_loader)
+            else:
+                step = args.start_epoch * train_loader.batches_per_epoch
+
             GlobalStep.set(step)
 
             print(f"Epoch stored in checkpoint: {checkpoint['epoch']}")
