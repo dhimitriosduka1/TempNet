@@ -3,6 +3,7 @@ import os
 import shutil
 import argparse
 import json
+from tqdm import tqdm
 
 
 def parse_option():
@@ -36,9 +37,9 @@ def generate_data(source_folder, target_folder, target_class):
 
     f = []
     for key, _ in labels.items():
-        f.append(key)
+        f.append(f"{key}.tar")
 
-    for ids, dirs in enumerate(os.listdir(source_folder)):
+    for ids, dirs in enumerate(tqdm(os.listdir(source_folder))):
         # Check if the directory is in the labels
         if dirs in f:
             print("{} is transferred".format(dirs))
