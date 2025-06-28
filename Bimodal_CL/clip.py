@@ -1620,7 +1620,7 @@ if __name__ == "__main__":
 
     # DD
     # parser.add_argument("--train_file", default="downstream/cc3m_train_new.json")
-    # parser.add_argument("--train_image_root", default="cc3m")
+    parser.add_argument("--train_image_root", default="cc3m")
 
     # model config
     parser.add_argument("--bert_config", default="configs/config_bert.json")
