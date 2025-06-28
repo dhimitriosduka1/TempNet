@@ -169,7 +169,12 @@ def train(
         classes = batch["class_"]
         superclasses = batch["superclass_"]
 
-        if i % 500 == 0:
+        if args.data == "imagenet100":
+            freq = 100
+        else:
+            freq = 500
+
+        if i % freq == 0:
             model.eval()
             (
                 val_result_coco,
