@@ -251,3 +251,58 @@ class re_eval_dataset(Dataset):
             "image": image,
             "index": index,
         }
+
+
+class ImageNet100ValDataset(ImageFolder):
+    def __init__(self, root, transform=None, max_words=30):
+        image_path = os.path.join(root, "val")
+        super().__init__(image_path, transform)
+
+        label_path = os.path.join(root, "Labels.json")
+        with open(label_path, "r") as f:
+            self.labels = json.load(f)
+
+        self.text = []
+        self.image = []
+
+        self.txt2img = {}
+        self.img2txt = {}
+
+        self.template = "a photo of a {}."
+        self.max_words = max_words
+
+        # Iterate over the samples and generate the text for each image
+        print("Generating text for ImageNet100ValDataset...")
+        txt_id = 0
+        for path, label_idx in self.samples:
+            self.image.append(path)
+            self.img2txt[path] = []
+            
+            class_name = self.labels[self.classes[label_idx]]
+            text = self.template.format(class_name)
+            text = pre_caption(text, self.max_words)
+            self.text.append(text)
+
+            self.img2txt[path].append(txt_id)
+            self.txt2img[txt_id] = path
+            txt_id += 1
+
+        print("Done generating text for ImageNet100ValDataset.")
+
+        print("-------- Stats of ImageNet100ValDataset --------")
+        print("Number of text:", len(self.text))
+        print("Number of image:", len(self.image))
+        print("Number of txt2img:", len(self.txt2img))
+        print("Number of img2txt:", len(self.img2txt))
+
+    def __getitem__(self, index):
+        path, _ = self.samples[index]
+        original_image = self.loader(path)
+
+        if self.transform is not None:
+            image = self.transform(original_image)
+
+        return {
+            "image": image,
+            "index": index,
+        }

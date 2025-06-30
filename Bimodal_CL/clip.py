@@ -170,9 +170,11 @@ def train(
         superclasses = batch["superclass_"]
 
         if args.data == "imagenet100":
-            eval_freq = 100
+            eval_freq = len(data_loader)
         else:
             eval_freq = 500
+
+        print(f"eval_freq: {eval_freq}")
 
         if i % eval_freq == 0:
             model.eval()
@@ -189,6 +191,7 @@ def train(
                 val_flickr_loader=eval_objects["val_flickr_loader"],
                 test_flickr_loader=eval_objects["test_flickr_loader"],
                 val_cc3m_loader=eval_objects["val_cc3m_loader"],
+                val_imagenet100_loader=eval_objects["val_imagenet100_loader"],
                 tokenizer=tokenizer,
                 device=device,
                 args=args,
@@ -777,12 +780,19 @@ def main(args):
         val_image_root=None,
         load_cc3m_val=True,
     )
-    # sbu_dataset = create_val_dataset("re", args, args.sbu_file, args.sbu_image_root)
+
+    val_imagenet100_dataset = create_val_dataset(
+        dataset="imagenet100",
+        args=args,
+        val_file=None,
+        val_image_root=args.imagenet100_val_root,
+    )
 
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     print("len of cc3m val:", get_val_dataset_size())
+    print("len of imagenet100 val:", len(val_imagenet100_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -835,6 +845,14 @@ def main(args):
         [8] * 2,
         [None] * 2,
     )
+
+    val_imagenet100_loader = create_val_loader(
+        [val_imagenet100_dataset],
+        [None],
+        [args.batch_size_test],
+        [8],
+        [None],
+    )[0]
 
     val_cc3m_loader = create_val_loader(
         [val_cc3m_dataset],
@@ -1413,6 +1431,7 @@ def main(args):
             "val_flickr_loader": val_flickr_loader,
             "test_flickr_loader": test_flickr_loader,
             "val_cc3m_loader": val_cc3m_loader,
+            "val_imagenet100_loader": val_imagenet100_loader,
         }
 
         (
@@ -1529,6 +1548,7 @@ def evaluate(
     val_flickr_loader,
     test_flickr_loader,
     val_cc3m_loader,
+    val_imagenet100_loader,
     tokenizer,
     device,
     args,
@@ -1545,6 +1565,15 @@ def evaluate(
     )
     score_test_i2t_flickr, score_test_t2i_flickr, _ = evaluation(
         model_without_ddp, test_flickr_loader, tokenizer, device, args, "flickr"
+    )
+
+    score_val_i2t_imagenet100, score_val_t2i_imagenet100, _ = evaluation(
+        model_without_ddp,
+        val_imagenet100_loader,
+        tokenizer,
+        device,
+        args,
+        "imagenet100",
     )
 
     score_val_i2t_cc3m, score_val_t2i_cc3m, cc3m_stats = evaluation(
@@ -1608,6 +1637,17 @@ def evaluate(
         "flickr/test/" + key: value for key, value in test_result_flickr.items()
     }
 
+    val_result_imagenet100 = itm_eval(
+        score_val_i2t_imagenet100,
+        score_val_t2i_imagenet100,
+        val_imagenet100_loader.dataset.txt2img,
+        val_imagenet100_loader.dataset.img2txt,
+    )
+    print("imagenet100 val:", val_result_imagenet100)
+    val_result_imagenet100_wandb = {
+        "imagenet100/val/" + key: value for key, value in val_result_imagenet100.items()
+    }
+
     overall_stats = (
         val_result_coco_wandb
         | test_result_coco_wandb
@@ -1615,6 +1655,7 @@ def evaluate(
         | test_result_flickr_wandb
         | val_result_cc3m_wandb
         | cc3m_stats
+        | val_result_imagenet100_wandb
     )
 
     if utils.is_main_process():
@@ -1872,6 +1913,9 @@ if __name__ == "__main__":
     # For cluster stats
     parser.add_argument("--enable_cluster_stats_train", action="store_true")
     parser.add_argument("--enable_cluster_stats_val", action="store_true")
+
+    # ImageNet100
+    parser.add_argument("--imagenet100_val_root", default="")
 
     args = parser.parse_args()
 

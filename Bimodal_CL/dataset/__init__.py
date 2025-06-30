@@ -5,11 +5,13 @@ from PIL import Image, ImageFilter, ImageOps
 import random
 
 from dataset.caption_dataset import (
+    ImageNet100ValDataset,
     re_eval_dataset,
 )
 from dataset.randaugment import RandomAugment
 from dataset.cc3m_wds import make_dataset_train, CC3M_Val_Dataset
 from dataset.caption_dataset import ImageNet100Dataset
+
 
 class GaussianBlur(object):
     """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
@@ -75,10 +77,7 @@ def create_train_dataset(dataset, args, use_test_transform=False):
             noise_level=args.noise_level,
         )
 
-    return make_dataset_train(
-        transform=train_transform,
-        args=args
-    )
+    return make_dataset_train(transform=train_transform, args=args)
 
 
 def create_val_dataset(
@@ -116,6 +115,12 @@ def create_val_dataset(
         else:
             return val_dataset
 
+    elif dataset == "imagenet100":
+        return ImageNet100ValDataset(
+            root=val_image_root,
+            transform=test_transform,
+            max_words=args.max_words,
+        )
     else:
         assert 0, dataset + " is not supported."
 
