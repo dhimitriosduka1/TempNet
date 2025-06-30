@@ -22,7 +22,7 @@ conda activate bimodal_cl
 
 export mpcdf=1
 
-PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
+PROJECT_DIR="/u/dduka/work/projects/TempNet_/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
 data=cc3m
