@@ -166,7 +166,7 @@ def train(
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
                 text_tau_array[info_dict["text_ids"]] = info_dict["text_tau"]
 
-            if args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet":
+            if args.ita_type == "isogclr_tempnet":
                 (clip_loss, temp_loss) = loss_term
 
                 metric_logger.update(loss_ita=clip_loss.item())
@@ -197,6 +197,9 @@ def train(
 
                 grad_scaler.scale(loss_term).backward()
                 grad_scaler.step(optimizer)
+
+                if args.ita_type == "clip_tempnet":
+                    grad_scaler.step(optimizer_tempnet)
 
                 grad_scaler.update()
 

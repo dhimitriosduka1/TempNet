@@ -786,7 +786,7 @@ class CLIP_Loss_TempNet(nn.Module):
         ) / 2.0
 
         return (
-            (total_loss, total_loss),
+            total_loss,
             tau_image.cpu().detach().numpy(),
             tau_text.cpu().detach().numpy(),
         )
