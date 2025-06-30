@@ -6,6 +6,8 @@ import random
 
 from dataset.caption_dataset import (
     ImageNet100ValDataset,
+    ImageNet1kDataset,
+    ImageNet1kValDataset,
     re_eval_dataset,
 )
 from dataset.randaugment import RandomAugment
@@ -77,6 +79,12 @@ def create_train_dataset(dataset, args, use_test_transform=False):
             noise_level=args.noise_level,
         )
 
+    if dataset == "imagenet1k":
+        return ImageNet1kDataset(
+            root=args.train_image_root,
+            transform=train_transform,
+        )
+
     return make_dataset_train(transform=train_transform, args=args)
 
 
@@ -116,10 +124,9 @@ def create_val_dataset(
             return val_dataset
 
     elif dataset == "imagenet100":
-        return ImageNet100ValDataset(
-            root=val_image_root,
-            transform=test_transform
-        )
+        return ImageNet100ValDataset(root=val_image_root, transform=test_transform)
+    elif dataset == "imagenet1k":
+        return ImageNet1kValDataset(root=val_image_root, transform=test_transform)
     else:
         assert 0, dataset + " is not supported."
 

@@ -149,7 +149,7 @@ def train(
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
-    if args.data == "imagenet100":
+    if args.data == "imagenet100" or args.data == "imagenet1k":
         period = (args.epochs * len(data_loader)) / 5.0
     else:
         period = (args.epochs * data_loader.batches_per_epoch) / 5.0
@@ -169,7 +169,7 @@ def train(
         classes = batch["class_"]
         superclasses = batch["superclass_"]
 
-        if args.data == "imagenet100":
+        if args.data == "imagenet100" or args.data == "imagenet1k":
             eval_freq = len(data_loader)
         else:
             eval_freq = 500
@@ -192,6 +192,7 @@ def train(
                 test_flickr_loader=eval_objects["test_flickr_loader"],
                 val_cc3m_loader=eval_objects["val_cc3m_loader"],
                 val_imagenet100_loader=eval_objects["val_imagenet100_loader"],
+                val_imagenet1k_loader=eval_objects["val_imagenet1k_loader"],
                 tokenizer=tokenizer,
                 device=device,
                 args=args,
@@ -236,7 +237,7 @@ def train(
         else:
             with torch.cuda.amp.autocast():
                 # Use cos temperature schduler if enabled
-                if args.data == "imagenet100":
+                if args.data == "imagenet100" or args.data == "imagenet1k":
                     global_it = epoch * len(data_loader) + i
                 else:
                     global_it = epoch * data_loader.batches_per_epoch + i
@@ -756,10 +757,14 @@ def main(args):
 
     if args.data in ["sbu", "cc3m", "cc12m"]:
         train_dataset = create_train_dataset("re", args)
-    else:
+    elif args.data == "imagenet100":
         train_dataset = create_train_dataset("imagenet100", args)
+    elif args.data == "imagenet1k":
+        train_dataset = create_train_dataset("imagenet1k", args)
+    else:
+        assert 0, args.data + " is not supported."
 
-    if args.data == "imagenet100":
+    if args.data == "imagenet100" or args.data == "imagenet1k":
         args.data_number = len(train_dataset)
     else:
         args.data_number = get_train_dataset_size()
@@ -788,11 +793,19 @@ def main(args):
         val_image_root=args.imagenet100_val_root,
     )
 
+    val_imagenet1k_dataset = create_val_dataset(
+        dataset="imagenet1k",
+        args=args,
+        val_file=None,
+        val_image_root=args.imagenet1k_val_root,
+    )
+
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     print("len of cc3m val:", get_val_dataset_size())
     print("len of imagenet100 val:", len(val_imagenet100_dataset))
+    print("len of imagenet1k val:", len(val_imagenet1k_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -809,7 +822,7 @@ def main(args):
 
         assert 0
 
-    if args.data == "imagenet100":
+    if args.data == "imagenet100" or args.data == "imagenet1k":
         if args.distributed:
             num_tasks = utils.get_world_size()
             global_rank = utils.get_rank()
@@ -854,6 +867,14 @@ def main(args):
         [None],
     )[0]
 
+    val_imagenet1k_loader = create_val_loader(
+        [val_imagenet1k_dataset],
+        [None],
+        [args.batch_size_test],
+        [8],
+        [None],
+    )[0]
+
     val_cc3m_loader = create_val_loader(
         [val_cc3m_dataset],
         [None],
@@ -887,7 +908,7 @@ def main(args):
             image_size=args.image_res,
         )
 
-    if args.data == "imagenet100":
+    if args.data == "imagenet100" or args.data == "imagenet1k":
         total_steps = args.epochs * len(train_dataset)
     else:
         total_steps = args.epochs * train_loader.batches_per_epoch
@@ -1378,7 +1399,7 @@ def main(args):
         if "epoch" in checkpoint:
             args.start_epoch = checkpoint["epoch"] + 1
 
-            if args.data == "imagenet100":
+            if args.data == "imagenet100" or args.data == "imagenet1k":
                 step = args.start_epoch * len(train_loader)
             else:
                 step = args.start_epoch * train_loader.batches_per_epoch
@@ -1419,7 +1440,9 @@ def main(args):
     for epoch in range(args.start_epoch, max_epoch):
         print(f"Epoch {epoch} of {max_epoch}")
 
-        if args.data == "imagenet100" and args.distributed:
+        if (
+            args.data == "imagenet100" or args.data == "imagenet1k"
+        ) and args.distributed:
             train_loader.sampler.set_epoch(epoch)
 
         start_epoch_time = time.time()
@@ -1432,6 +1455,7 @@ def main(args):
             "test_flickr_loader": test_flickr_loader,
             "val_cc3m_loader": val_cc3m_loader,
             "val_imagenet100_loader": val_imagenet100_loader,
+            "val_imagenet1k_loader": val_imagenet1k_loader,
         }
 
         (
@@ -1549,6 +1573,7 @@ def evaluate(
     test_flickr_loader,
     val_cc3m_loader,
     val_imagenet100_loader,
+    val_imagenet1k_loader,
     tokenizer,
     device,
     args,
@@ -1574,6 +1599,15 @@ def evaluate(
         device,
         args,
         "imagenet100",
+    )
+
+    score_val_i2t_imagenet1k, score_val_t2i_imagenet1k, _ = evaluation(
+        model_without_ddp,
+        val_imagenet1k_loader,
+        tokenizer,
+        device,
+        args,
+        "imagenet1k",
     )
 
     score_val_i2t_cc3m, score_val_t2i_cc3m, cc3m_stats = evaluation(
@@ -1648,6 +1682,17 @@ def evaluate(
         "imagenet100/val/" + key: value for key, value in val_result_imagenet100.items()
     }
 
+    val_result_imagenet1k = itm_eval(
+        score_val_i2t_imagenet1k,
+        score_val_t2i_imagenet1k,
+        val_imagenet1k_loader.dataset.txt2img,
+        val_imagenet1k_loader.dataset.img2txt,
+    )
+    print("imagenet1k val:", val_result_imagenet1k)
+    val_result_imagenet1k_wandb = {
+        "imagenet1k/val/" + key: value for key, value in val_result_imagenet1k.items()
+    }
+
     overall_stats = (
         val_result_coco_wandb
         | test_result_coco_wandb
@@ -1656,6 +1701,7 @@ def evaluate(
         | val_result_cc3m_wandb
         | cc3m_stats
         | val_result_imagenet100_wandb
+        | val_result_imagenet1k_wandb
     )
 
     if utils.is_main_process():
@@ -1915,7 +1961,9 @@ if __name__ == "__main__":
     parser.add_argument("--enable_cluster_stats_val", action="store_true")
 
     # ImageNet100
-    parser.add_argument("--imagenet100_val_root", default="/ptmp/dduka/work/data/imagenet100/")
+    parser.add_argument(
+        "--imagenet100_val_root", default="/ptmp/dduka/work/data/imagenet100/"
+    )
 
     args = parser.parse_args()
 

@@ -306,3 +306,95 @@ class ImageNet100ValDataset(ImageFolder):
             "image": image,
             "index": index,
         }
+
+
+class ImageNet1kDataset(ImageFolder):
+    def __init__(self, root, transform=None):
+        image_path = os.path.join(root, "train")
+        super().__init__(image_path, transform)
+
+        label_path = os.path.join(root, "Labels.json")
+        with open(label_path, "r") as f:
+            self.labels = json.load(f)
+
+    def __getitem__(self, index):
+        path, label_idx = self.samples[index]
+        original_image = self.loader(path)
+
+        if self.transform is not None:
+            image = self.transform(original_image)
+            augmented_image = self.transform(original_image)
+
+        class_name = self.labels[str(label_idx)]
+
+        # Generate text label
+        text = random.choice(imagenet_templates).format(class_name)
+        augmented_text = random.choice(imagenet_templates).format(class_name)
+
+        return {
+            "image": image,
+            "augmented_image": augmented_image,
+            "caption": text,
+            "augmented_caption": augmented_text,
+            "key": index,
+            "idx": index,
+            "text_idx": index,
+            "expert_image_embedding": torch.zeros(4),  # Placeholder
+            "class_": label_idx,
+            "superclass_": label_idx,
+        }
+
+
+class ImageNet1kValDataset(ImageFolder):
+    def __init__(self, root, transform=None, max_words=30):
+        image_path = os.path.join(root, "val")
+        super().__init__(image_path, transform)
+
+        label_path = os.path.join(root, "Labels.json")
+        with open(label_path, "r") as f:
+            self.labels = json.load(f)
+
+        self.text = []
+        self.image = []
+
+        self.txt2img = {}
+        self.img2txt = {}
+
+        self.template = "a photo of a {}."
+        self.max_words = max_words
+
+        # Iterate over the samples and generate the text for each image
+        print("Generating text for ImageNet1kValDataset...")
+        index = 0
+        for path, label_idx in self.samples:
+            self.image.append(path)
+            self.img2txt[index] = []
+
+            class_name = self.labels[str(label_idx)]
+            text = self.template.format(class_name)
+            text = pre_caption(text, self.max_words)
+            self.text.append(text)
+
+            self.img2txt[index].append(index)
+            self.txt2img[index] = index
+            index += 1
+
+        print("Done generating text for ImageNet1kValDataset.")
+
+        print("-------- Stats of ImageNet1kValDataset --------")
+        print("Number of text:", len(self.text))
+        print("Number of image:", len(self.image))
+        print("Number of txt2img:", len(self.txt2img))
+        print("Number of img2txt:", len(self.img2txt))
+
+    def __getitem__(self, index):
+        path, _ = self.samples[index]
+        original_image = self.loader(path)
+
+        if self.transform is not None:
+            image = self.transform(original_image)
+
+        return {
+            "image": image,
+            "index": index,
+        }
