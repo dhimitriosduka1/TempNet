@@ -1915,7 +1915,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_cluster_stats_val", action="store_true")
 
     # ImageNet100
-    parser.add_argument("--imagenet100_val_root", default="")
+    parser.add_argument("--imagenet100_val_root", default="/ptmp/dduka/work/data/imagenet100/")
 
     args = parser.parse_args()
 
