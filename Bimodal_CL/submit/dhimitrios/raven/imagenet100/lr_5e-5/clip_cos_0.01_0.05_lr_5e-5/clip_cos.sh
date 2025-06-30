@@ -29,7 +29,7 @@ LR=5e-5
 TAU_MIN=0.01
 TAU_MAX=0.05
 
-DESC=R_BASELINE_CLIP_COS_${TAU_MIN}_${TAU_MAX}_IMAGENET100
+DESC=R_BASELINE_CLIP_COS_${TAU_MIN}_${TAU_MAX}_IMAGENET100_LR_5E-5
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
