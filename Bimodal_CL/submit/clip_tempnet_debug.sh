@@ -7,9 +7,11 @@
 
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
+#SBATCH --partition=gpudev
 
-#SBATCH --gres=gpu:4
-#SBATCH --mem=480000
+
+#SBATCH --gres=gpu:1
+#SBATCH --mem=120000
 
 #SBATCH --time=01:59:59
 
