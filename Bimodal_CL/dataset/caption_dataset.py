@@ -273,19 +273,19 @@ class ImageNet100ValDataset(ImageFolder):
 
         # Iterate over the samples and generate the text for each image
         print("Generating text for ImageNet100ValDataset...")
-        txt_id = 0
+        index = 0
         for path, label_idx in self.samples:
             self.image.append(path)
-            self.img2txt[path] = []
-            
+            self.img2txt[index] = []
+
             class_name = self.labels[self.classes[label_idx]]
             text = self.template.format(class_name)
             text = pre_caption(text, self.max_words)
             self.text.append(text)
 
-            self.img2txt[path].append(txt_id)
-            self.txt2img[txt_id] = path
-            txt_id += 1
+            self.img2txt[index].append(index)
+            self.txt2img[index] = index
+            index += 1
 
         print("Done generating text for ImageNet100ValDataset.")
 
