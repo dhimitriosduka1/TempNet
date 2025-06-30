@@ -490,6 +490,9 @@ class TempGenerator(torch.nn.Module):
 
         tau = self.linear_1((weights - 1.0 / self.M) * sims).squeeze()
 
+        print("tau:", tau)
+        print("sigmoid(tau):", torch.sigmoid(tau))
+
         return (self.tau_max - self.tau_min) * torch.sigmoid(tau) + self.tau_min
 
 
