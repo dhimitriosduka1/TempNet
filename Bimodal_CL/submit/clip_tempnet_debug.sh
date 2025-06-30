@@ -31,7 +31,7 @@ lr=8e-4
 desc=clip_tempnet_lr8e-4_M256_pt_dataloader_debug
 rho=7.0
 
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
+CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port=4820 \
     --use_env clip.py \
     --data ${data} \
     --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/$desc \
