@@ -38,7 +38,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/$DESC/ \
     --init_model \
     --use_amp \
-    --epochs 200 --lr $LR \
+    --epochs 50 --lr $LR \
     --ita_type clip \
     --temperature_scheduler cos \
     --tau_min $TAU_MIN \

@@ -171,12 +171,8 @@ def train(
 
         if args.data == "imagenet100":
             eval_freq = len(data_loader)
-        elif args.data == "imagenet1k":
-            eval_freq = 250
         else:
             eval_freq = 500
-
-        print(f"eval_freq: {eval_freq}")
 
         if i % eval_freq == 0:
             model.eval()
@@ -1723,7 +1719,9 @@ if __name__ == "__main__":
 
     # data path
     parser.add_argument(
-        "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100", "imagenet1k"]
+        "--data",
+        required=True,
+        choices=["sbu", "cc3m", "cc12m", "imagenet100", "imagenet1k"],
     )
     parser.add_argument("--data_path", default=cm.get_config_for("data_path"))
 
