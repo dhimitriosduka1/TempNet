@@ -755,7 +755,7 @@ class CLIP_Loss_TempNet(nn.Module):
         rho=8.0,
         feature_dim=256,
     ):
-        super(CLIP_Loss, self).__init__()
+        super(CLIP_Loss_TempNet, self).__init__()
         self.world_size = world_size
 
         self.rho = rho
