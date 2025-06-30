@@ -1967,6 +1967,11 @@ if __name__ == "__main__":
         "--imagenet100_val_root", default="/ptmp/dduka/work/data/imagenet100/"
     )
 
+    # ImageNet1k
+    parser.add_argument(
+        "--imagenet1k_val_root", default="/ptmp/dduka/work/data/imagenet1k/"
+    )
+
     args = parser.parse_args()
 
     # Validation
