@@ -569,46 +569,33 @@ def evaluation(model, data_loader, tokenizer, device, args, dataset_name):
         )
         stats = stats_evaluator.format(stats, prefix="cc3m/val")
 
-    num_images = len(data_loader.dataset.image)
-    num_texts = len(text_embeds)
-    chunk_size = args.chunk_size if hasattr(args, "chunk_size") else 256
-    k = args.k_test
+    sims_matrix = image_embeds @ text_embeds.t()
+    score_matrix_i2t = torch.full(
+        (len(data_loader.dataset.image), len(texts)), -100.0
+    ).to(device)
 
-    # Initialize empty score matrices
-    score_matrix_i2t = torch.full((num_images, num_texts), -100.0, device=device)
-    score_matrix_t2i = torch.full((num_texts, num_images), -100.0, device=device)
-
-    # Distributed setup
     num_tasks = utils.get_world_size()
     rank = utils.get_rank()
+    step = sims_matrix.size(0) // num_tasks + 1
+    start = rank * step
+    end = min(sims_matrix.size(0), start + step)
 
-    # -------- Image-to-Text Retrieval --------
-    image_step = image_embeds.size(0) // num_tasks + 1
-    image_start = rank * image_step
-    image_end = min(image_embeds.size(0), image_start + image_step)
+    for i, sims in enumerate(sims_matrix[start:end]):
+        topk_sim, topk_idx = sims.topk(k=args.k_test, dim=0)
+        score_matrix_i2t[start + i, topk_idx] = topk_sim
 
-    for i_start in range(image_start, image_end, chunk_size):
-        i_end = min(i_start + chunk_size, image_end)
-        image_chunk = image_embeds[i_start:i_end]  # [chunk_size, dim]
-        sims = torch.matmul(image_chunk, text_embeds.T)  # [chunk_size, num_texts]
+    sims_matrix = sims_matrix.t()
+    score_matrix_t2i = torch.full(
+        (len(texts), len(data_loader.dataset.image)), -100.0
+    ).to(device)
 
-        for i, sim_row in enumerate(sims):
-            topk_sim, topk_idx = sim_row.topk(k=k, dim=0)
-            score_matrix_i2t[i_start + i, topk_idx] = topk_sim
+    step = sims_matrix.size(0) // num_tasks + 1
+    start = rank * step
+    end = min(sims_matrix.size(0), start + step)
 
-    # -------- Text-to-Image Retrieval --------
-    text_step = text_embeds.size(0) // num_tasks + 1
-    text_start = rank * text_step
-    text_end = min(text_embeds.size(0), text_start + text_step)
-
-    for t_start in range(text_start, text_end, chunk_size):
-        t_end = min(t_start + chunk_size, text_end)
-        text_chunk = text_embeds[t_start:t_end]
-        sims = torch.matmul(text_chunk, image_embeds.T)  # [chunk_size, num_images]
-
-        for i, sim_row in enumerate(sims):
-            topk_sim, topk_idx = sim_row.topk(k=k, dim=0)
-            score_matrix_t2i[t_start + i, topk_idx] = topk_sim
+    for i, sims in enumerate(sims_matrix[start:end]):
+        topk_sim, topk_idx = sims.topk(k=args.k_test, dim=0)
+        score_matrix_t2i[start + i, topk_idx] = topk_sim
 
     dist.barrier()
     torch.distributed.all_reduce(score_matrix_i2t, op=torch.distributed.ReduceOp.SUM)
@@ -1612,14 +1599,14 @@ def evaluate(
         "imagenet100",
     )
 
-    score_val_i2t_imagenet1k, score_val_t2i_imagenet1k, _ = evaluation(
-        model_without_ddp,
-        val_imagenet1k_loader,
-        tokenizer,
-        device,
-        args,
-        "imagenet1k",
-    )
+    # score_val_i2t_imagenet1k, score_val_t2i_imagenet1k, _ = evaluation(
+    #     model_without_ddp,
+    #     val_imagenet1k_loader,
+    #     tokenizer,
+    #     device,
+    #     args,
+    #     "imagenet1k",
+    # )
 
     score_val_i2t_cc3m, score_val_t2i_cc3m, cc3m_stats = evaluation(
         model_without_ddp, val_cc3m_loader, tokenizer, device, args, "cc3m"
@@ -1693,16 +1680,16 @@ def evaluate(
         "imagenet100/val/" + key: value for key, value in val_result_imagenet100.items()
     }
 
-    val_result_imagenet1k = itm_eval(
-        score_val_i2t_imagenet1k,
-        score_val_t2i_imagenet1k,
-        val_imagenet1k_loader.dataset.txt2img,
-        val_imagenet1k_loader.dataset.img2txt,
-    )
-    print("imagenet1k val:", val_result_imagenet1k)
-    val_result_imagenet1k_wandb = {
-        "imagenet1k/val/" + key: value for key, value in val_result_imagenet1k.items()
-    }
+    # val_result_imagenet1k = itm_eval(
+    #     score_val_i2t_imagenet1k,
+    #     score_val_t2i_imagenet1k,
+    #     val_imagenet1k_loader.dataset.txt2img,
+    #     val_imagenet1k_loader.dataset.img2txt,
+    # )
+    # print("imagenet1k val:", val_result_imagenet1k)
+    # val_result_imagenet1k_wandb = {
+    #     "imagenet1k/val/" + key: value for key, value in val_result_imagenet1k.items()
+    # }
 
     overall_stats = (
         val_result_coco_wandb
@@ -1712,7 +1699,7 @@ def evaluate(
         | val_result_cc3m_wandb
         | cc3m_stats
         | val_result_imagenet100_wandb
-        | val_result_imagenet1k_wandb
+        # | val_result_imagenet1k_wandb
     )
 
     if utils.is_main_process():
