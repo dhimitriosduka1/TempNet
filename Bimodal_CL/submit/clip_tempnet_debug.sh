@@ -7,8 +7,8 @@
 
 #SBATCH --ntasks=1
 
-#SBATCH --gres=gpu:2
-#SBATCH --mem=240000
+#SBATCH --gres=gpu:4
+#SBATCH --mem=480000
 
 #SBATCH --time=00:59:59
 
@@ -28,7 +28,7 @@ lr=8e-4
 desc=clip_tempnet_lr8e-4_M256_pt_dataloader_debug_3
 rho=7.0
 
-CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 --master_port=4820 \
+CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --data ${data} \
     --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/$desc \
