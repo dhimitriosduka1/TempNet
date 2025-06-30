@@ -1042,8 +1042,8 @@ def main(args):
 
     optimizer, optimizer_tempnet = create_optimizer(args, model)  # clip model optimizer
 
-    if args.ita_type in ["isogclr_tempnet"]:  # , 'isogclr_protonet']:
-        assert optimizer_tempnet is not None, "we need a optimizer for isogclr_tempnet"
+    if args.ita_type in ["isogclr_tempnet", "clip_tempnet"]:  # , 'isogclr_protonet']:
+        assert optimizer_tempnet is not None, "we need a optimizer for isogclr_tempnet or clip_tempnet"
     else:
         assert optimizer_tempnet is None
 
