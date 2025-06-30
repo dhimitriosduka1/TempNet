@@ -752,7 +752,9 @@ def main(args):
         # pass
         if args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet":
             with torch.no_grad():
-                image, text, _, _ = next(iter(train_loader))
+                batch = next(iter(train_loader))
+                image = batch["image"]
+                text = batch["caption"]
 
                 image = image.to(device)
                 image_embeds = model.vision_proj(model.visual_encoder(image))
