@@ -1723,7 +1723,7 @@ if __name__ == "__main__":
 
     # data path
     parser.add_argument(
-        "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100"]
+        "--data", required=True, choices=["sbu", "cc3m", "cc12m", "imagenet100", "imagenet1k"]
     )
     parser.add_argument("--data_path", default=cm.get_config_for("data_path"))
 
