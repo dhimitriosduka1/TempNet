@@ -475,25 +475,104 @@ class TempGenerator(torch.nn.Module):
         self.prototypes.data.copy_(feats)
 
     def forward(self, x, return_feats=False):
+        print(f"\n=== TempGenerator Debug Info ===")
+        print(f"Input x shape: {x.shape}")
+        print(f"Input x stats - min: {x.min().item():.6f}, max: {x.max().item():.6f}, mean: {x.mean().item():.6f}")
+        print(f"Input x has NaN: {torch.isnan(x).any().item()}")
 
-        x = self.dropout(torch.sigmoid(self.proj(x)))
+        # Projection
+        proj_output = self.proj(x)
+        print(f"Projection output stats - min: {proj_output.min().item():.6f}, max: {proj_output.max().item():.6f}, mean: {proj_output.mean().item():.6f}")
+        print(f"Projection output has NaN: {torch.isnan(proj_output).any().item()}")
+
+        # Sigmoid
+        sigmoid_output = torch.sigmoid(proj_output)
+        print(f"Sigmoid output stats - min: {sigmoid_output.min().item():.6f}, max: {sigmoid_output.max().item():.6f}, mean: {sigmoid_output.mean().item():.6f}")
+        print(f"Sigmoid output has NaN: {torch.isnan(sigmoid_output).any().item()}")
+
+        # Dropout
+        x = self.dropout(sigmoid_output)
+        print(f"After dropout stats - min: {x.min().item():.6f}, max: {x.max().item():.6f}, mean: {x.mean().item():.6f}")
+        print(f"After dropout has NaN: {torch.isnan(x).any().item()}")
 
         if return_feats:
             return x
 
+        # Prototype normalization
+        print(f"Prototypes shape: {self.prototypes.shape}")
+        print(f"Prototypes stats - min: {self.prototypes.min().item():.6f}, max: {self.prototypes.max().item():.6f}, mean: {self.prototypes.mean().item():.6f}")
+        print(f"Prototypes has NaN: {torch.isnan(self.prototypes).any().item()}")
+
         normed_protos = F.normalize(self.prototypes, p=2.0, dim=1)
+        print(f"Normalized prototypes stats - min: {normed_protos.min().item():.6f}, max: {normed_protos.max().item():.6f}, mean: {normed_protos.mean().item():.6f}")
+        print(f"Normalized prototypes has NaN: {torch.isnan(normed_protos).any().item()}")
 
+        # Matrix multiplication
         prods = x @ normed_protos.t()
+        print(f"Products (prods) shape: {prods.shape}")
+        print(f"Products stats - min: {prods.min().item():.6f}, max: {prods.max().item():.6f}, mean: {prods.mean().item():.6f}")
+        print(f"Products has NaN: {torch.isnan(prods).any().item()}")
 
-        weights = nn.Softmax(dim=1)(prods / self.scaler.exp())
+        # Scaler information
+        print(f"Scaler parameter: {self.scaler.item():.6f}")
+        scaler_exp = self.scaler.exp()
+        print(f"Scaler.exp(): {scaler_exp.item():.6f}")
+        print(f"Scaler.exp() has NaN: {torch.isnan(scaler_exp).any().item()}")
+
+        # Division for softmax
+        prods_scaled = prods / scaler_exp
+        print(f"Products after scaling stats - min: {prods_scaled.min().item():.6f}, max: {prods_scaled.max().item():.6f}, mean: {prods_scaled.mean().item():.6f}")
+        print(f"Products after scaling has NaN: {torch.isnan(prods_scaled).any().item()}")
+
+        # Softmax
+        weights = nn.Softmax(dim=1)(prods_scaled)
+        print(f"Weights shape: {weights.shape}")
+        print(f"Weights stats - min: {weights.min().item():.6f}, max: {weights.max().item():.6f}, mean: {weights.mean().item():.6f}")
+        print(f"Weights has NaN: {torch.isnan(weights).any().item()}")
+
+        # Sigmoid of products
         sims = torch.sigmoid(prods)
+        print(f"Sims shape: {sims.shape}")
+        print(f"Sims stats - min: {sims.min().item():.6f}, max: {sims.max().item():.6f}, mean: {sims.mean().item():.6f}")
+        print(f"Sims has NaN: {torch.isnan(sims).any().item()}")
 
-        tau = self.linear_1((weights - 1.0 / self.M) * sims).squeeze()
+        # Weight adjustment
+        weight_adjustment = weights - 1.0 / self.M
+        print(f"Weight adjustment stats - min: {weight_adjustment.min().item():.6f}, max: {weight_adjustment.max().item():.6f}, mean: {weight_adjustment.mean().item():.6f}")
+        print(f"Weight adjustment has NaN: {torch.isnan(weight_adjustment).any().item()}")
 
-        print("tau:", tau)
-        print("sigmoid(tau):", torch.sigmoid(tau))
+        # Element-wise multiplication
+        adjusted_sims = weight_adjustment * sims
+        print(f"Adjusted sims stats - min: {adjusted_sims.min().item():.6f}, max: {adjusted_sims.max().item():.6f}, mean: {adjusted_sims.mean().item():.6f}")
+        print(f"Adjusted sims has NaN: {torch.isnan(adjusted_sims).any().item()}")
 
-        return (self.tau_max - self.tau_min) * torch.sigmoid(tau) + self.tau_min
+        # Linear layer
+        linear_input = adjusted_sims
+        print(f"Linear input shape: {linear_input.shape}")
+        print(f"Linear input stats - min: {linear_input.min().item():.6f}, max: {linear_input.max().item():.6f}, mean: {linear_input.mean().item():.6f}")
+        print(f"Linear input has NaN: {torch.isnan(linear_input).any().item()}")
+
+        tau = self.linear_1(linear_input).squeeze()
+        print(f"Tau before squeeze shape: {tau.shape}")
+        print(f"Tau before squeeze stats - min: {tau.min().item():.6f}, max: {tau.max().item():.6f}, mean: {tau.mean().item():.6f}")
+        print(f"Tau before squeeze has NaN: {torch.isnan(tau).any().item()}")
+
+        tau = tau.squeeze()
+        print(f"Tau after squeeze shape: {tau.shape}")
+        print(f"Tau after squeeze stats - min: {tau.min().item():.6f}, max: {tau.max().item():.6f}, mean: {tau.mean().item():.6f}")
+        print(f"Tau after squeeze has NaN: {torch.isnan(tau).any().item()}")
+
+        # Final sigmoid and scaling
+        sigmoid_tau = torch.sigmoid(tau)
+        print(f"Sigmoid(tau) stats - min: {sigmoid_tau.min().item():.6f}, max: {sigmoid_tau.max().item():.6f}, mean: {sigmoid_tau.mean().item():.6f}")
+        print(f"Sigmoid(tau) has NaN: {torch.isnan(sigmoid_tau).any().item()}")
+
+        final_tau = (self.tau_max - self.tau_min) * sigmoid_tau + self.tau_min
+        print(f"Final tau stats - min: {final_tau.min().item():.6f}, max: {final_tau.max().item():.6f}, mean: {final_tau.mean().item():.6f}")
+        print(f"Final tau has NaN: {torch.isnan(final_tau).any().item()}")
+        print(f"=== End TempGenerator Debug Info ===\n")
+
+        return final_tau
 
 
 class iSogCLR_TempNet_Loss(nn.Module):  # using TempGenerator
