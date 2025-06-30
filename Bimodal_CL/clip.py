@@ -169,8 +169,10 @@ def train(
         classes = batch["class_"]
         superclasses = batch["superclass_"]
 
-        if args.data == "imagenet100" or args.data == "imagenet1k":
+        if args.data == "imagenet100":
             eval_freq = len(data_loader)
+        elif args.data == "imagenet1k":
+            eval_freq = 250
         else:
             eval_freq = 500
 
