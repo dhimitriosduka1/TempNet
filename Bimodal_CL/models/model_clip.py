@@ -11,6 +11,7 @@ from models.losses import (
     iSogCLR_TempNet_Loss,
     VICReg_Loss,
     onlineCLR_Loss,
+    CLIP_Loss_TempNet,
 )
 
 import torch
@@ -129,7 +130,12 @@ class CLIP(nn.Module):
                 rho=rho,
                 feature_dim=embed_dim,
             )
-
+        elif self.ita_type == "clip_tempnet":
+            self.criterion = CLIP_Loss_TempNet(
+                world_size=world_size,
+                rho=rho,
+                feature_dim=embed_dim,
+            )
         else:
             raise NotImplementedError
 
@@ -208,6 +214,11 @@ class CLIP(nn.Module):
 
         elif self.ita_type == "onlineclr":
             loss_ita = self.criterion(image_feat, text_feat)
+
+        elif self.ita_type == "clip_tempnet":
+            loss_ita, image_tau, text_tau = self.criterion(image_feat, text_feat)
+
+            info_dict = {"image_tau": image_tau, "text_tau": text_tau}
 
         else:
             raise NotImplementedError

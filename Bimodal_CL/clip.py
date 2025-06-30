@@ -122,7 +122,9 @@ def train(
     step_size = 100
     warmup_iterations = warmup_steps * step_size
 
-    if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
+    if (
+        args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet"
+    ) and epoch == args.epochs - 1:
         image_tau_array = np.zeros(args.data_number)
         text_tau_array = np.zeros(args.data_number)
 
@@ -158,11 +160,13 @@ def train(
                     max_epoch=max_epoch,
                 )
 
-            if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
+            if (
+                args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet"
+            ) and epoch == args.epochs - 1:
                 image_tau_array[info_dict["image_ids"]] = info_dict["image_tau"]
                 text_tau_array[info_dict["text_ids"]] = info_dict["text_tau"]
 
-            if args.ita_type == "isogclr_tempnet":
+            if args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet":
                 (clip_loss, temp_loss) = loss_term
 
                 metric_logger.update(loss_ita=clip_loss.item())
@@ -230,7 +234,9 @@ def train(
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger.global_avg())
 
-    if args.ita_type == "isogclr_tempnet" and epoch == args.epochs - 1:
+    if (
+        args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet"
+    ) and epoch == args.epochs - 1:
 
         with open(os.path.join(args.output_dir, "tau.pkl"), "wb") as f:
             pickle.dump(
@@ -687,7 +693,7 @@ def main(args):
                 gathered_keys = [[] for _ in range(torch.distributed.get_world_size())]
                 torch.distributed.all_gather_object(gathered_keys, key)
                 key = list(chain(*gathered_keys))
-                
+
             image_feats.append(image_feat.cpu())
             text_feats.append(text_feat.cpu())
             keys.extend(key)
@@ -744,7 +750,7 @@ def main(args):
 
     else:
         # pass
-        if args.ita_type == "isogclr_tempnet":
+        if args.ita_type == "isogclr_tempnet" or args.ita_type == "clip_tempnet":
             with torch.no_grad():
                 image, text, _, _ = next(iter(train_loader))
 

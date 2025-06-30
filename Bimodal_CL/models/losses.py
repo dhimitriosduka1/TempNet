@@ -746,3 +746,47 @@ class onlineCLR_Loss(nn.Module):
         loss = (loss_a + loss_b).mean()
 
         return loss
+
+
+class CLIP_Loss_TempNet(nn.Module):
+    def __init__(
+        self,
+        world_size=8,
+        rho=8.0,
+        feature_dim=256,
+    ):
+        super(CLIP_Loss, self).__init__()
+        self.world_size = world_size
+
+        self.rho = rho
+        self.feature_dim = feature_dim
+
+        self.image_temp_gen = TempGenerator(
+            feature_dim=self.feature_dim, rho=self.rho
+        ).cuda()
+        self.text_temp_gen = TempGenerator(
+            feature_dim=self.feature_dim, rho=self.rho
+        ).cuda()
+
+    def forward(self, image_features, text_features):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
+
+        labels = torch.arange(image_features.shape[0], device=image_features.device)
+
+        tau_image = self.image_temp_gen(image_features.detach())
+        tau_text = self.text_temp_gen(text_features.detach())
+
+        t2i_sim = (text_features @ image_features.T) / tau_text[:, None]
+        i2t_sim = t2i_sim.T / tau_image[:, None]
+
+        total_loss = (
+            F.cross_entropy(i2t_sim, labels) + F.cross_entropy(t2i_sim, labels)
+        ) / 2.0
+
+        return (
+            (total_loss, total_loss),
+            tau_image.cpu().detach().numpy(),
+            tau_text.cpu().detach().numpy(),
+        )
