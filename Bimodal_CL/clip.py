@@ -1310,6 +1310,7 @@ if __name__ == "__main__":
             "isogclr",
             "isogclr_tempnet",
             "onlineclr",
+            "clip_tempnet",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
