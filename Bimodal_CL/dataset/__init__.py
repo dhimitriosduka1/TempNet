@@ -118,8 +118,7 @@ def create_val_dataset(
     elif dataset == "imagenet100":
         return ImageNet100ValDataset(
             root=val_image_root,
-            transform=test_transform,
-            max_words=args.max_words,
+            transform=test_transform
         )
     else:
         assert 0, dataset + " is not supported."
