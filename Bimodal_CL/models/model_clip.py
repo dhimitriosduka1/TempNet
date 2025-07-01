@@ -150,62 +150,27 @@ class CLIP(nn.Module):
 
         # with torch.no_grad():
         image_embeds = self.visual_encoder(image)
-        print(f"Visual encoder output stats - min: {image_embeds.min().item():.6f}, max: {image_embeds.max().item():.6f}, mean: {image_embeds.mean().item():.6f}")
-        print(f"Visual encoder output has NaN: {torch.isnan(image_embeds).any().item()}")
-        print(f"Visual encoder output has Inf: {torch.isinf(image_embeds).any().item()}")
-        
-        # Check vision projection parameters
-        print(f"Vision projection weight stats - min: {self.vision_proj.weight.min().item():.6f}, max: {self.vision_proj.weight.max().item():.6f}, mean: {self.vision_proj.weight.mean().item():.6f}")
-        print(f"Vision projection weight has NaN: {torch.isnan(self.vision_proj.weight).any().item()}")
-        print(f"Vision projection bias stats - min: {self.vision_proj.bias.min().item():.6f}, max: {self.vision_proj.bias.max().item():.6f}, mean: {self.vision_proj.bias.mean().item():.6f}")
-        print(f"Vision projection bias has NaN: {torch.isnan(self.vision_proj.bias).any().item()}")
-        
+      
         image_embeds = self.vision_proj(image_embeds)
-        print(f"Vision projection output stats - min: {image_embeds.min().item():.6f}, max: {image_embeds.max().item():.6f}, mean: {image_embeds.mean().item():.6f}")
-        print(f"Vision projection output has NaN: {torch.isnan(image_embeds).any().item()}")
-        print(f"Vision projection output has Inf: {torch.isinf(image_embeds).any().item()}")
         
         # Check for zero norm before normalization
         image_norms = torch.norm(image_embeds, dim=-1)
-        print(f"Image embeddings norms - min: {image_norms.min().item():.6f}, max: {image_norms.max().item():.6f}, mean: {image_norms.mean().item():.6f}")
-        print(f"Image embeddings with zero norm: {(image_norms == 0).sum().item()}")
         
         image_feat = F.normalize(image_embeds, dim=-1)
-        print(f"Normalized image features stats - min: {image_feat.min().item():.6f}, max: {image_feat.max().item():.6f}, mean: {image_feat.mean().item():.6f}")
-        print(f"Normalized image features has NaN: {torch.isnan(image_feat).any().item()}")
-        print(f"Normalized image features has Inf: {torch.isinf(image_feat).any().item()}")
-
+      
         text_output = self.text_encoder(
             text.input_ids,
             attention_mask=text.attention_mask,
             output_hidden_states=False,
         )
-        print(f"Text encoder output stats - min: {text_output.last_hidden_state.min().item():.6f}, max: {text_output.last_hidden_state.max().item():.6f}, mean: {text_output.last_hidden_state.mean().item():.6f}")
-        print(f"Text encoder output has NaN: {torch.isnan(text_output.last_hidden_state).any().item()}")
-        print(f"Text encoder output has Inf: {torch.isinf(text_output.last_hidden_state).any().item()}")
-        
-        # Check text projection parameters
-        print(f"Text projection weight stats - min: {self.text_proj.weight.min().item():.6f}, max: {self.text_proj.weight.max().item():.6f}, mean: {self.text_proj.weight.mean().item():.6f}")
-        print(f"Text projection weight has NaN: {torch.isnan(self.text_proj.weight).any().item()}")
-        print(f"Text projection bias stats - min: {self.text_proj.bias.min().item():.6f}, max: {self.text_proj.bias.max().item():.6f}, mean: {self.text_proj.bias.mean().item():.6f}")
-        print(f"Text projection bias has NaN: {torch.isnan(self.text_proj.bias).any().item()}")
         
         text_embeds = self.text_proj(text_output.last_hidden_state[:, 0, :])
-        print(f"Text projection output stats - min: {text_embeds.min().item():.6f}, max: {text_embeds.max().item():.6f}, mean: {text_embeds.mean().item():.6f}")
-        print(f"Text projection output has NaN: {torch.isnan(text_embeds).any().item()}")
-        print(f"Text projection output has Inf: {torch.isinf(text_embeds).any().item()}")
         
         # Check for zero norm before normalization
         text_norms = torch.norm(text_embeds, dim=-1)
-        print(f"Text embeddings norms - min: {text_norms.min().item():.6f}, max: {text_norms.max().item():.6f}, mean: {text_norms.mean().item():.6f}")
-        print(f"Text embeddings with zero norm: {(text_norms == 0).sum().item()}")
         
         text_feat = F.normalize(text_embeds, dim=-1)
-        print(f"Normalized text features stats - min: {text_feat.min().item():.6f}, max: {text_feat.max().item():.6f}, mean: {text_feat.mean().item():.6f}")
-        print(f"Normalized text features has NaN: {torch.isnan(text_feat).any().item()}")
-        print(f"Normalized text features has Inf: {torch.isinf(text_feat).any().item()}")
-        print(f"=== End Model CLIP Debug ===")
-
+      
         if return_feat:
             return image_feat, text_feat
 
