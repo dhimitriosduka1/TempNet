@@ -186,6 +186,10 @@ def train(
                         {
                             "train/clip_loss": clip_loss.item(),
                             "train/temp_loss": temp_loss.item(),
+                            "train/lr": optimizer.param_groups[0]["lr"],
+                            "train/lr_temp_net": optimizer_tempnet.param_groups[0][
+                                "lr"
+                            ],
                         },
                         step=GlobalStep.get(),
                     )
@@ -194,6 +198,9 @@ def train(
                 metric_logger.update(loss_ita=loss_term.item())
 
                 optimizer.zero_grad()
+
+                if args.ita_type == "clip_tempnet":
+                    optimizer_tempnet.zero_grad()
 
                 grad_scaler.scale(loss_term).backward()
                 grad_scaler.step(optimizer)
@@ -204,16 +211,24 @@ def train(
                 grad_scaler.update()
 
                 if utils.is_main_process():
+                    log = {
+                        "train/loss": loss_term.item(),
+                        "train/tau_image_min": np.min(info_dict["image_tau"]),
+                        "train/tau_image_max": np.max(info_dict["image_tau"]),
+                        "train/tau_image_mean": np.mean(info_dict["image_tau"]),
+                        "train/tau_text_min": np.min(info_dict["text_tau"]),
+                        "train/tau_text_max": np.max(info_dict["text_tau"]),
+                        "train/tau_text_mean": np.mean(info_dict["text_tau"]),
+                        "train/lr": optimizer.param_groups[0]["lr"],
+                    }
+                    
+                    if args.ita_type == "clip_tempnet":
+                        log["train/lr_temp_net"] = optimizer_tempnet.param_groups[0][
+                            "lr"
+                        ]
+
                     wandb.log(
-                        {
-                            "train/loss": loss_term.item(),
-                            "train/tau_image_min": np.min(info_dict["image_tau"]),
-                            "train/tau_image_max": np.max(info_dict["image_tau"]),
-                            "train/tau_image_mean": np.mean(info_dict["image_tau"]),
-                            "train/tau_text_min": np.min(info_dict["text_tau"]),
-                            "train/tau_text_max": np.max(info_dict["text_tau"]),
-                            "train/tau_text_mean": np.mean(info_dict["text_tau"]),
-                        },
+                        log,
                         step=GlobalStep.get(),
                     )
 
