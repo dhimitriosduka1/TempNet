@@ -25,7 +25,7 @@ cd "${PROJECT_DIR}"
 data=cc3m
 
 lr=8e-4
-desc=clip_tempnet_lr8e-4_M256_pt_dataloader_debug_5
+desc=clip_tempnet_lr8e-4_M256_pt_dataloader_debug_6
 rho=7.0
 
 CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 --master_port=4820 \
@@ -35,7 +35,7 @@ CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 -
     --init_model \
     --use_amp \
     --epochs 30 --lr ${lr} \
-    --lr_temp_net 3e-5 \
+    --lr_temp_net 1e-6 \
     --rho ${rho} \
     --ita_type clip_tempnet \
     --batch_size_train 256 \
