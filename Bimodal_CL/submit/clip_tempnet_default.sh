@@ -11,7 +11,7 @@
 #SBATCH --gres=gpu:4
 #SBATCH --mem=480000
 
-#SBATCH --time=23:59:59
+#SBATCH --time=35:59:59
 
 module purge
 module load anaconda/3/2023.03
