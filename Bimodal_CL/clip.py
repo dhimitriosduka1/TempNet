@@ -272,10 +272,10 @@ def train(
         print("image tau mean:", np.mean(image_tau_array))
         print("text tau mean:", np.mean(text_tau_array))
 
-    return {
-        k: "{:.3f}".format(meter.global_avg)
-        for k, meter in metric_logger.meters.items()
-    }
+    # return {
+    #     k: "{:.3f}".format(meter.global_avg)
+    #     for k, meter in metric_logger.meters.items()
+    # }
 
 
 """
