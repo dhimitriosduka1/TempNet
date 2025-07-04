@@ -181,6 +181,7 @@ class CLIP(nn.Module):
                 alpha=sim_based_loss_alpha,
                 total_steps=total_steps,
                 clip_scheduled_loss_type=clip_scheduled_loss_type,
+                disable_temo_modulation=self.disable_temo_modulation,
             )
         elif self.ita_type == "scheduled_crossmodal_clip_loss":
             print(f"Using Scheduled_CLIP_Loss")

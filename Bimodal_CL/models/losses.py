@@ -834,6 +834,7 @@ class Scheduled_CLIP_Loss(nn.Module):
         alpha=0.1,
         total_steps=None,
         clip_scheduled_loss_type="none",
+        disable_temo_modulation=False,
     ):
         super(Scheduled_CLIP_Loss, self).__init__()
         self.world_size = world_size
@@ -841,6 +842,7 @@ class Scheduled_CLIP_Loss(nn.Module):
         self.alpha = alpha
         self.total_steps = total_steps
         self.clip_scheduled_loss_type = clip_scheduled_loss_type
+        self.disable_temo_modulation = disable_temo_modulation
 
         assert (
             total_steps is not None
@@ -889,25 +891,28 @@ class Scheduled_CLIP_Loss(nn.Module):
 
         clip_total_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
-        print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
-        if per_sample_temp_mapping == "adaptive_with_base":
-            per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
-                (sim_for_temp + 1.0) / 2.0
-            )
-        elif per_sample_temp_mapping == "adaptive_without_base":
-            per_sample_temperature = (
-                self.alpha * torch.sqrt((sim_for_temp + 1.0) / 2.0) + 1e-9
-            )
-        elif per_sample_temp_mapping == "cosine":
-            min_temperature = self.temperature
-            max_temperature = self.alpha + self.temperature
-            per_sample_temperature = min_temperature + 0.5 * (
-                max_temperature - min_temperature
-            ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_for_temp)))
+        if self.disable_temo_modulation:
+            per_sample_temperature = self.temperature
         else:
-            raise ValueError(
-                f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
-            )
+            print(f"Using per_sample_temp_mapping: {per_sample_temp_mapping}")
+            if per_sample_temp_mapping == "adaptive_with_base":
+                per_sample_temperature = self.temperature + self.alpha * torch.sqrt(
+                    (sim_for_temp + 1.0) / 2.0
+                )
+            elif per_sample_temp_mapping == "adaptive_without_base":
+                per_sample_temperature = (
+                    self.alpha * torch.sqrt((sim_for_temp + 1.0) / 2.0) + 1e-9
+                )
+            elif per_sample_temp_mapping == "cosine":
+                min_temperature = self.temperature
+                max_temperature = self.alpha + self.temperature
+                per_sample_temperature = min_temperature + 0.5 * (
+                    max_temperature - min_temperature
+                ) * (1.0 + torch.cos(torch.pi * (1.0 + sim_for_temp)))
+            else:
+                raise ValueError(
+                    f"Unknown per_sample_temp_mapping: {per_sample_temp_mapping}. Use adaptive_with_base or adaptive_without_base"
+                )
 
         sim_per_sample = sim_for_temp / per_sample_temperature
         labels = torch.arange(image_features.shape[0], device=image_features.device)
