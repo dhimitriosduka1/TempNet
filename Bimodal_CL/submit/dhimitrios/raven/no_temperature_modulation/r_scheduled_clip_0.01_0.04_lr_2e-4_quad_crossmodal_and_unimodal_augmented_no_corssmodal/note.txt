@@ -1,0 +1,3 @@
+This run checks the importance of using modulated temperature in TeMo. The loss has the following form:
+
+L_TeMo = \alpha L_InfoNCE + \beta (L_MI2I + L_MT2T)

@@ -1,0 +1,5 @@
+This run checks the importance of using modulated temperature in TeMo. The loss has the following form:
+
+L_TeMo = \alpha L_InfoNCE + \beta (L_MInfoNCE + L_MI2I + L_MT2T)
+
+Since the temperature will be fixed, L_MInfoNCE is essentially L_InfoNCE. Another experiment, r_scheduled_clip_0.01_0.04_lr_2e-4_quad_crossmodal_and_unimodal_augmented_no_corssmodal, removes L_MInfoNCE

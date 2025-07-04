@@ -25,19 +25,19 @@ PROJECT_DIR="/u/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
 DATA=cc3m
-LR=8e-4
-ITA_TYPE=scheduled_clip_loss
+LR=2e-4
+ITA_TYPE=scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss
 
 BASE_TAU=0.01
-ALPHA=0.02
+ALPHA=0.04
 
-DESC=SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD_T2I_NO_TEMPERATURE_MODULATION
+DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD_CROSSMODAL_AND_UNIMODAL_AUGMENTED_NO_TEMPERATURE_MODULATION_NO_CROSSMODAL_MINFONCE
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
     --run_name $DESC \
     --data $DATA \
-    --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/$DESC/ \
+    --output_dir /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/$DESC/ \
     --init_model \
     --use_amp \
     --epochs 30 --lr $LR \
@@ -45,6 +45,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_nod
     --sim_based_loss_alpha $ALPHA \
     --temp $BASE_TAU \
     --clip_scheduled_loss_type quadratic \
-    --per_sample_temp_similarity t2i \
-    --per_sample_temp_mapping adaptive_with_base \
+    --enable_i2i_loss \
+    --enable_t2t_loss \
+    --cc3m_extended_captions_path /ptmp/dduka/work/data/cc3m/training/captions_extended_llm.json \
     --disable_temo_modulation \
+    --disable_crossmodal_minfonce \
