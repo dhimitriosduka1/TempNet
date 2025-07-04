@@ -1175,6 +1175,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         total_steps=None,
         clip_scheduled_loss_type="none",
         disable_temo_modulation=False,
+        disable_crossmodal_minfonce=False,
     ):
         super(
             Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss, self
@@ -1185,6 +1186,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         self.total_steps = total_steps
         self.clip_scheduled_loss_type = clip_scheduled_loss_type
         self.disable_temo_modulation = disable_temo_modulation
+        self.disable_crossmodal_minfonce = disable_crossmodal_minfonce
 
         print(f"===> Using disable_temo_modulation: {disable_temo_modulation}")
 
@@ -1232,22 +1234,27 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         info_nce_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
         # First, compute the modulated InfoNCE loss components
-        if self.disable_temo_modulation:
-            per_sample_temp_t2i = self.temperature
-            per_sample_temp_i2t = self.temperature
+        if self.disable_crossmodal_minfonce:
+            modulated_info_nce_loss = 0.0
         else:
-            per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
-                (sim_t2i + 1.0) / 2.0
+            if self.disable_temo_modulation:
+                per_sample_temp_t2i = self.temperature
+                per_sample_temp_i2t = self.temperature
+            else:
+                per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+                    (sim_t2i + 1.0) / 2.0
+                )
+
+                per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+                    (sim_t2i.t() + 1.0) / 2.0
+                )
+
+            modulated_t2i_loss = F.cross_entropy(sim_t2i / per_sample_temp_t2i, labels)
+            modulated_i2t_loss = F.cross_entropy(
+                sim_t2i.t() / per_sample_temp_i2t, labels
             )
 
-            per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
-                (sim_t2i.t() + 1.0) / 2.0
-            )
-
-        modulated_t2i_loss = F.cross_entropy(sim_t2i / per_sample_temp_t2i, labels)
-        modulated_i2t_loss = F.cross_entropy(sim_t2i.t() / per_sample_temp_i2t, labels)
-
-        modulated_info_nce_loss = (modulated_t2i_loss + modulated_i2t_loss) / 2.0
+            modulated_info_nce_loss = (modulated_t2i_loss + modulated_i2t_loss) / 2.0
 
         # Next, compute the modulated unimodal loss components based on the original and augmented features
         sim_i2i = image_features @ augmented_image_features.T

@@ -67,6 +67,7 @@ class CLIP(nn.Module):
         use_per_sample_temp=False,
         include_unimodal_loss=False,
         disable_temo_modulation=False,
+        disable_crossmodal_minfonce=False,
     ):
         super().__init__()
 
@@ -102,6 +103,7 @@ class CLIP(nn.Module):
 
         self.ita_type = ita_type
         self.disable_temo_modulation = disable_temo_modulation
+        self.disable_crossmodal_minfonce = disable_crossmodal_minfonce
 
         if self.ita_type == "clip":
             if not personalized_tau:
@@ -271,6 +273,7 @@ class CLIP(nn.Module):
                     total_steps=total_steps,
                     clip_scheduled_loss_type=clip_scheduled_loss_type,
                     disable_temo_modulation=self.disable_temo_modulation,
+                    disable_crossmodal_minfonce=self.disable_crossmodal_minfonce,
                 )
             )
         elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":
