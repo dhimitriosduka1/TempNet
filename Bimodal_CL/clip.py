@@ -944,6 +944,8 @@ def main(args):
         include_unimodal_loss=args.include_unimodal_loss,
         disable_temo_modulation=args.disable_temo_modulation,
         disable_crossmodal_minfonce=args.disable_crossmodal_minfonce,
+        disable_i2i_temo_loss=args.disable_i2i_temo_loss,
+        disable_t2t_temo_loss=args.disable_t2t_temo_loss,
     )
 
     model = model.to(device)
@@ -1975,6 +1977,8 @@ if __name__ == "__main__":
     # Enabling or not temperature modulation for the loss
     parser.add_argument("--disable_temo_modulation", action="store_true")
     parser.add_argument("--disable_crossmodal_minfonce", action="store_true")
+    parser.add_argument("--disable_i2i_temo_loss", action="store_true")
+    parser.add_argument("--disable_t2t_temo_loss", action="store_true")
 
     args = parser.parse_args()
 
