@@ -946,6 +946,7 @@ def main(args):
         disable_crossmodal_minfonce=args.disable_crossmodal_minfonce,
         disable_i2i_temo_loss=args.disable_i2i_temo_loss,
         disable_t2t_temo_loss=args.disable_t2t_temo_loss,
+        reversed_scheduler=args.reversed_scheduler,
     )
 
     model = model.to(device)
@@ -1979,6 +1980,9 @@ if __name__ == "__main__":
     parser.add_argument("--disable_crossmodal_minfonce", action="store_true")
     parser.add_argument("--disable_i2i_temo_loss", action="store_true")
     parser.add_argument("--disable_t2t_temo_loss", action="store_true")
+
+    # Reversed scheduler
+    parser.add_argument("--reversed_scheduler", action="store_true")
 
     args = parser.parse_args()
 

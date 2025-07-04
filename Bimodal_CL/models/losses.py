@@ -1178,6 +1178,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         disable_crossmodal_minfonce=False,
         disable_i2i_temo_loss=False,
         disable_t2t_temo_loss=False,
+        reversed_scheduler=False,
     ):
         super(
             Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss, self
@@ -1192,6 +1193,8 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
 
         self.disable_i2i_temo_loss = disable_i2i_temo_loss
         self.disable_t2t_temo_loss = disable_t2t_temo_loss
+
+        self.reversed_scheduler = reversed_scheduler
 
         print(f"===> Using disable_temo_modulation: {disable_temo_modulation}")
 
@@ -1311,6 +1314,12 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         else:
             raise ValueError(
                 f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
+            )
+
+        if self.reversed_scheduler:
+            info_nce_loss_weight, modulated_unimodal_loss_weight = (
+                modulated_unimodal_loss_weight,
+                info_nce_loss_weight,
             )
 
         # Combine the two losses using a weighted sum

@@ -70,6 +70,7 @@ class CLIP(nn.Module):
         disable_crossmodal_minfonce=False,
         disable_i2i_temo_loss=False,
         disable_t2t_temo_loss=False,
+        reversed_scheduler=False,
     ):
         super().__init__()
 
@@ -108,6 +109,8 @@ class CLIP(nn.Module):
         self.disable_crossmodal_minfonce = disable_crossmodal_minfonce
         self.disable_i2i_temo_loss = disable_i2i_temo_loss
         self.disable_t2t_temo_loss = disable_t2t_temo_loss
+
+        self.reversed_scheduler = reversed_scheduler
 
         if self.ita_type == "clip":
             if not personalized_tau:
@@ -280,6 +283,7 @@ class CLIP(nn.Module):
                     disable_crossmodal_minfonce=self.disable_crossmodal_minfonce,
                     disable_i2i_temo_loss=self.disable_i2i_temo_loss,
                     disable_t2t_temo_loss=self.disable_t2t_temo_loss,
+                    reversed_scheduler=self.reversed_scheduler,
                 )
             )
         elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":
