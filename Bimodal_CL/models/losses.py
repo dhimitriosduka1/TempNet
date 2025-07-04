@@ -1169,6 +1169,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         alpha=0.1,
         total_steps=None,
         clip_scheduled_loss_type="none",
+        disable_temo_modulation=False,
     ):
         super(
             Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss, self
@@ -1178,6 +1179,9 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         self.alpha = alpha
         self.total_steps = total_steps
         self.clip_scheduled_loss_type = clip_scheduled_loss_type
+        self.disable_temo_modulation = disable_temo_modulation
+
+        print(f"===> Using disable_temo_modulation: {disable_temo_modulation}")
 
         assert (
             total_steps is not None
@@ -1223,13 +1227,17 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         info_nce_loss = (clip_i2t_loss + clip_t2i_loss) / 2
 
         # First, compute the modulated InfoNCE loss components
-        per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
-            (sim_t2i + 1.0) / 2.0
-        )
+        if self.disable_temo_modulation:
+            per_sample_temp_t2i = self.temperature
+            per_sample_temp_i2t = self.temperature
+        else:
+            per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+                (sim_t2i + 1.0) / 2.0
+            )
 
-        per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
-            (sim_t2i.t() + 1.0) / 2.0
-        )
+            per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+                (sim_t2i.t() + 1.0) / 2.0
+            )
 
         modulated_t2i_loss = F.cross_entropy(sim_t2i / per_sample_temp_t2i, labels)
         modulated_i2t_loss = F.cross_entropy(sim_t2i.t() / per_sample_temp_i2t, labels)
@@ -1239,17 +1247,23 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         # Next, compute the modulated unimodal loss components based on the original and augmented features
         sim_i2i = image_features @ augmented_image_features.T
 
-        per_sample_temp_i2i = self.temperature + self.alpha * torch.sqrt(
-            (sim_i2i + 1.0) / 2.0
-        )
+        if self.disable_temo_modulation:
+            per_sample_temp_i2i = self.temperature
+        else:
+            per_sample_temp_i2i = self.temperature + self.alpha * torch.sqrt(
+                (sim_i2i + 1.0) / 2.0
+            )
 
         modulated_i2i_loss = F.cross_entropy(sim_i2i / per_sample_temp_i2i, labels)
 
         sim_t2t = text_features @ augmented_text_features.T
 
-        per_sample_temp_t2t = self.temperature + self.alpha * torch.sqrt(
-            (sim_t2t + 1.0) / 2.0
-        )
+        if self.disable_temo_modulation:
+            per_sample_temp_t2t = self.temperature
+        else:
+            per_sample_temp_t2t = self.temperature + self.alpha * torch.sqrt(
+                (sim_t2t + 1.0) / 2.0
+            )
 
         modulated_t2t_loss = F.cross_entropy(sim_t2t / per_sample_temp_t2t, labels)
 

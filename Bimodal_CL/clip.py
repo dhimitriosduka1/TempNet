@@ -942,6 +942,7 @@ def main(args):
         clip_scheduled_loss_type=args.clip_scheduled_loss_type,
         use_per_sample_temp=args.use_per_sample_temp,
         include_unimodal_loss=args.include_unimodal_loss,
+        disable_temo_modulation=args.disable_temo_modulation,
     )
 
     model = model.to(device)
@@ -1969,6 +1970,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--imagenet1k_val_root", default="/ptmp/dduka/work/data/imagenet/"
     )
+
+    # Enabling or not temperature modulation for the loss
+    parser.add_argument("--disable_temo_modulation", action="store_true")
 
     args = parser.parse_args()
 
