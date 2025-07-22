@@ -1063,12 +1063,6 @@ def main(args):
 
     zsh_eval = args.zsh_eval
 
-    if args.knn_eval:
-        results = evaluate_unimodal_knn(model, args, device)
-        wandb.log(results)
-        print(results)
-        return
-
     if zsh_eval:
         zeroshot_dataloader = create_zeroshot_dataloader(
             dataset_name=zs_dataset,
@@ -1588,6 +1582,12 @@ def main(args):
             print(f"Training will start from step: {GlobalStep.get()}")
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
+
+    if args.knn_eval:
+        results = evaluate_unimodal_knn(model, args, device)
+        wandb.log(results)
+        print(results)
+        exit()
 
     if zsh_eval:
         zsh_results = zeroshot_transfer(
