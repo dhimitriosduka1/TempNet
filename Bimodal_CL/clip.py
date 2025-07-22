@@ -671,6 +671,7 @@ def evaluate_modality_gap(model, data_loader, tokenizer, device, args, dataset_n
     }
 
 
+@torch.no_grad()
 def evaluate_unimodal_knn(model, args, device):
     model.eval()
 
@@ -713,8 +714,8 @@ def evaluate_unimodal_knn(model, args, device):
             train_features.append(image_embed)
             train_labels.append(label)
 
-        train_features = torch.cat(train_features, dim=0)
-        train_labels = torch.cat(train_labels, dim=0)
+        train_features = torch.cat(train_features, dim=0).cpu()
+        train_labels = torch.cat(train_labels, dim=0).cpu()
 
         print(f"Shape of {dataset_name} train features: {train_features.shape}")
         print(f"Shape of {dataset_name} train labels: {train_labels.shape}")
@@ -732,8 +733,8 @@ def evaluate_unimodal_knn(model, args, device):
             val_features.append(image_embed)
             val_labels.append(label)
 
-        val_features = torch.cat(val_features, dim=0)
-        val_labels = torch.cat(val_labels, dim=0)
+        val_features = torch.cat(val_features, dim=0).cpu()
+        val_labels = torch.cat(val_labels, dim=0).cpu()
         print(f"Shape of {dataset_name} val features: {val_features.shape}")
         print(f"Shape of {dataset_name} val labels: {val_labels.shape}")
 
