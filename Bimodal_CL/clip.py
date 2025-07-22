@@ -68,6 +68,8 @@ from dataset.cc3m_wds import (
 from scheduler.temperature_scheduler import get_next_temperature
 from global_step import GlobalStep
 
+from tqdm import tqdm
+
 import traceback
 
 # =================== Loading configuration files based on the env ========================
@@ -701,7 +703,9 @@ def evaluate_unimodal_knn(model, args, device):
         # Extract training features and labelsC
         train_features = []
         train_labels = []
-        for image, label in train_dataloader:
+        for image, label in tqdm(
+            train_dataloader, desc=f"Extracting {dataset_name} train features"
+        ):
             image, label = image.to(device), label.to(device)
             image_feat = model.visual_encoder(image)
             image_embed = model.vision_proj(image_feat)
@@ -718,7 +722,9 @@ def evaluate_unimodal_knn(model, args, device):
         # Extract validation features and labels
         val_features = []
         val_labels = []
-        for image, label in val_dataloader:
+        for image, label in tqdm(
+            val_dataloader, desc=f"Extracting {dataset_name} val features"
+        ):
             image, label = image.to(device), label.to(device)
             image_feat = model.visual_encoder(image)
             image_embed = model.vision_proj(image_feat)
