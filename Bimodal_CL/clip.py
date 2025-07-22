@@ -1584,7 +1584,7 @@ def main(args):
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
     if args.knn_eval:
-        results = evaluate_unimodal_knn(model, args, device)
+        results = evaluate_unimodal_knn(model_without_ddp, args, device)
         wandb.log(results)
         print(results)
         exit()
