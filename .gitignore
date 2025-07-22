@@ -18,3 +18,5 @@ coco_log.txt
 /Bimodal_CL/submit/*/*/losses.py
 checkpoint*.json
 .vscode
+cifar10
+cifar100
