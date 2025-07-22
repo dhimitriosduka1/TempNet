@@ -34,7 +34,7 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
     MODEL_NAME=$(basename $(dirname "$MODEL_PATH"))
     DESC=KNN_EVAL_${MODEL_NAME}
 
-    CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port=7800 \
+    CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.launch --nproc_per_node=4 --master_port=7800 \
         --use_env clip.py \
         --run_name "$DESC" \
         --data cc3m \
