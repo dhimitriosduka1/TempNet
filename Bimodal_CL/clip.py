@@ -408,7 +408,7 @@ def train(
 """
 
 
-def create_zeroshot_dataloader(dataset_name, data_folder, image_size):
+def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=False):
     assert dataset_name in ["cifar10", "cifar100", "imagenet"]
 
     if dataset_name == "cifar10":
@@ -434,11 +434,11 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size):
 
     if dataset_name == "cifar10":
         dataset = datasets.CIFAR10(
-            root=data_folder, download=True, train=False, transform=val_transform
+            root=data_folder, download=True, train=train, transform=val_transform
         )
     elif dataset_name == "cifar100":
         dataset = datasets.CIFAR100(
-            root=data_folder, download=True, train=False, transform=val_transform
+            root=data_folder, download=True, train=train, transform=val_transform
         )
     else:
         dataset = datasets.ImageFolder(root=data_folder, transform=val_transform)
@@ -667,6 +667,109 @@ def evaluate_modality_gap(model, data_loader, tokenizer, device, args, dataset_n
     return {
         "modality_gap": modality_gap,
     }
+
+
+def evaluate_unimodal_knn(model, args, device):
+    model.eval()
+
+    results = {}
+
+    for dataset_name in ["cifar10", "cifar100"]:
+        if dataset_name == "cifar10":
+            num_class = 10
+        elif dataset_name == "cifar100":
+            num_class = 100
+        else:
+            assert 0, f"Dataset {dataset_name} not supported"
+
+        print(f"Loading {dataset_name} train dataloader...")
+        train_dataloader = create_zeroshot_dataloader(
+            dataset_name=dataset_name,
+            data_folder=args.zs_dataset,
+            image_size=args.image_res,
+            train=True,
+        )
+
+        print(f"Loading {dataset_name} val dataloader...")
+        val_dataloader = create_zeroshot_dataloader(
+            dataset_name=dataset_name,
+            data_folder=args.zs_dataset,
+            image_size=args.image_res,
+            train=False,
+        )
+
+        # Extract training features and labelsC
+        train_features = []
+        train_labels = []
+        for image, label in train_dataloader:
+            image, label = image.to(device), label.to(device)
+            image_feat = model.visual_encoder(image)
+            image_embed = model.vision_proj(image_feat)
+            image_embed = F.normalize(image_embed, dim=-1)
+            train_features.append(image_embed)
+            train_labels.append(label)
+
+        train_features = torch.cat(train_features, dim=0)
+        train_labels = torch.cat(train_labels, dim=0)
+
+        print(f"Shape of {dataset_name} train features: {train_features.shape}")
+        print(f"Shape of {dataset_name} train labels: {train_labels.shape}")
+
+        # Extract validation features and labels
+        val_features = []
+        val_labels = []
+        for image, label in val_dataloader:
+            image, label = image.to(device), label.to(device)
+            image_feat = model.visual_encoder(image)
+            image_embed = model.vision_proj(image_feat)
+            image_embed = F.normalize(image_embed, dim=-1)
+            val_features.append(image_embed)
+            val_labels.append(label)
+
+        val_features = torch.cat(val_features, dim=0)
+        val_labels = torch.cat(val_labels, dim=0)
+        print(f"Shape of {dataset_name} val features: {val_features.shape}")
+        print(f"Shape of {dataset_name} val labels: {val_labels.shape}")
+
+        dist_tmp = torch.cdist(val_features, train_features)
+        print(f"Shape of dist_tmp: {dist_tmp.shape}")
+
+        predicted = torch.argsort(dist_tmp, dim=1).numpy()
+
+        # KNN@1
+        class_acc = []
+        for cl in range(num_class):
+            class_mask = val_labels == cl
+            predictions = predicted[class_mask, 0]
+            result = (train_labels[predictions] == cl).sum() / class_mask.sum()
+            class_acc.append(result)
+
+        class_acc.append(np.mean(class_acc))
+        print(f"{dataset_name} KNN@1: {class_acc[-1]*100:.2f}")
+        knn1_acc = class_acc[-1] * 100
+
+        # KNN@10
+        class_acc = []
+        for cl in range(num_class):
+            class_mask = val_labels == cl
+            predictions = predicted[class_mask, :10]
+
+            predict_mat = np.zeros(((class_mask.sum(), num_class)))
+            for cl2 in range(num_class):
+                result2 = (train_labels[predictions] == cl2).sum(1)
+                predict_mat[:, cl2] = result2
+
+            result = (np.argmax(predict_mat, 1) == cl).sum() / class_mask.sum()
+            class_acc.append(result)
+
+        class_acc.append(np.mean(class_acc))
+        print(f"{dataset_name} KNN@10: {class_acc[-1]*100:.2f}")
+        knn10_acc = class_acc[-1] * 100
+
+        results[f"{dataset_name}_knn1"] = knn1_acc
+        results[f"{dataset_name}_knn10"] = knn10_acc
+
+    return results
 
 
 @torch.no_grad()
@@ -959,6 +1062,12 @@ def main(args):
     zeroshot_dataloader = None
 
     zsh_eval = args.zsh_eval
+
+    if args.knn_eval:
+        results = evaluate_unimodal_knn(model, args, device)
+        wandb.log(results)
+        print(results)
+        return
 
     if zsh_eval:
         zeroshot_dataloader = create_zeroshot_dataloader(
@@ -1787,7 +1896,7 @@ def evaluate(
         modality_gap_cc3m = evaluate_modality_gap(
             model_without_ddp, val_cc3m_loader, tokenizer, device, args, "cc3m"
         )
-        
+
         modality_gap_cc3m_wandb = {
             "cc3m/val/modality_gap": modality_gap_cc3m,
         }
@@ -2082,6 +2191,9 @@ if __name__ == "__main__":
 
     # Modality gap evaluation
     parser.add_argument("--modality_gap_evaluation", action="store_true")
+
+    # KNN evaluation
+    parser.add_argument("--knn_eval", action="store_true")
 
     args = parser.parse_args()
 
