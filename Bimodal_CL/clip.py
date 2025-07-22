@@ -685,7 +685,7 @@ def evaluate_unimodal_knn(model, args, device):
         print(f"Loading {dataset_name} train dataloader...")
         train_dataloader = create_zeroshot_dataloader(
             dataset_name=dataset_name,
-            data_folder=args.zs_dataset,
+            data_folder="/BS/dduka/work/projects/TempNet/Bimodal_CL",
             image_size=args.image_res,
             train=True,
         )
@@ -693,7 +693,7 @@ def evaluate_unimodal_knn(model, args, device):
         print(f"Loading {dataset_name} val dataloader...")
         val_dataloader = create_zeroshot_dataloader(
             dataset_name=dataset_name,
-            data_folder=args.zs_dataset,
+            data_folder="/BS/dduka/work/projects/TempNet/Bimodal_CL",
             image_size=args.image_res,
             train=False,
         )
