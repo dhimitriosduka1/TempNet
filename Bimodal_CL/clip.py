@@ -609,6 +609,67 @@ def evaluation(model, data_loader, tokenizer, device, args, dataset_name):
 
 
 @torch.no_grad()
+def evaluate_modality_gap(model, data_loader, tokenizer, device, args, dataset_name):
+    # test
+    model.eval()
+
+    print(f"Computing features for modality gap evaluation on {dataset_name}...")
+    start_time = time.time()
+
+    texts = data_loader.dataset.text
+    num_text = len(texts)
+    text_bs = 256
+    text_embeds = []
+    for i in range(0, num_text, text_bs):
+        text = texts[i : min(num_text, i + text_bs)]
+        text_input = tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
+        text_output = model.text_encoder(
+            text_input.input_ids,
+            attention_mask=text_input.attention_mask,
+            output_hidden_states=False,
+        )
+        text_embed = F.normalize(
+            model.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
+        )
+        text_embeds.append(text_embed)
+
+    text_embeds = torch.cat(text_embeds, dim=0)
+    print(f"Shape of text_embeds: {text_embeds.shape}")
+
+    image_embeds = []
+
+    for batch in data_loader:
+        image = batch["image"]
+        image = image.to(device)
+        image_feat = model.visual_encoder(image)
+        image_embed = model.vision_proj(image_feat)
+        image_embed = F.normalize(image_embed, dim=-1)
+        image_embeds.append(image_embed)
+
+    image_embeds = torch.cat(image_embeds, dim=0)
+    print(f"Shape of image_embeds: {image_embeds.shape}")
+
+    mean_text_embeds = text_embeds.mean(dim=0)
+    mean_image_embeds = image_embeds.mean(dim=0)
+
+    modality_gap = torch.norm(mean_text_embeds - mean_image_embeds, p=2)
+
+    total_time = time.time() - start_time
+    total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+    print("Evaluation time {}".format(total_time_str))
+
+    return {
+        "modality_gap": modality_gap,
+    }
+
+
+@torch.no_grad()
 def itm_eval(scores_i2t, scores_t2i, txt2img, img2txt, img2supercls=[]):
 
     # Images->Text
@@ -1704,11 +1765,46 @@ def evaluate(
         | val_result_cc3m_wandb
         | cc3m_stats
         | val_result_imagenet100_wandb
-        # | val_result_imagenet1k_wandb
     )
+
+    # Modality gap
+    if args.modality_gap_evaluation:
+        modality_gap_flickr30k = evaluate_modality_gap(
+            model_without_ddp, val_flickr_loader, tokenizer, device, args, "flickr"
+        )
+
+        modality_gap_flickr30k_wandb = {
+            "flickr30k/val/modality_gap": modality_gap_flickr30k,
+        }
+
+        modality_gap_coco = evaluate_modality_gap(
+            model_without_ddp, val_coco_loader, tokenizer, device, args, "coco"
+        )
+        modality_gap_coco_wandb = {
+            "coco/val/modality_gap": modality_gap_coco,
+        }
+
+        modality_gap_cc3m = evaluate_modality_gap(
+            model_without_ddp, val_cc3m_loader, tokenizer, device, args, "cc3m"
+        )
+        
+        modality_gap_cc3m_wandb = {
+            "cc3m/val/modality_gap": modality_gap_cc3m,
+        }
+
+        overall_stats = (
+            overall_stats
+            | modality_gap_flickr30k_wandb
+            | modality_gap_coco_wandb
+            | modality_gap_cc3m_wandb
+        )
 
     if utils.is_main_process():
         wandb.log(data=overall_stats, step=wandb.run.step)
+
+    if args.modality_gap_evaluation:
+        print(f"Exiting...")
+        exit()
 
     return (
         val_result_coco,
@@ -1983,6 +2079,9 @@ if __name__ == "__main__":
 
     # Reversed scheduler
     parser.add_argument("--reversed_scheduler", action="store_true")
+
+    # Modality gap evaluation
+    parser.add_argument("--modality_gap_evaluation", action="store_true")
 
     args = parser.parse_args()
 
