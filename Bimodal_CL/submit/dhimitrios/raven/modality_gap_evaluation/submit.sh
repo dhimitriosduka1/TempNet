@@ -25,6 +25,8 @@ cd "${PROJECT_DIR}"
 
 MODEL_PATHS=(
     /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_quad_crossmodal/checkpoint_best.pth
+    /ptmp/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_2e-4_quad_crossmodal_and_unimodal_augmented/checkpoint_best.pth
 )
 
 for MODEL_PATH in "${MODEL_PATHS[@]}"; do
@@ -40,5 +42,5 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
         --use_amp \
         --ita_type clip \
         --checkpoint $MODEL_PATH \
-        --modality_gap_evaluation \
+        --modality_gap_evaluation
 done
