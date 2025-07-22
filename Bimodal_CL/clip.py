@@ -954,26 +954,26 @@ def main(args):
         load_cc3m_val=True,
     )
 
-    val_imagenet100_dataset = create_val_dataset(
-        dataset="imagenet100",
-        args=args,
-        val_file=None,
-        val_image_root=args.imagenet100_val_root,
-    )
+    # val_imagenet100_dataset = create_val_dataset(
+    #     dataset="imagenet100",
+    #     args=args,
+    #     val_file=None,
+    #     val_image_root=args.imagenet100_val_root,
+    # )
 
-    val_imagenet1k_dataset = create_val_dataset(
-        dataset="imagenet1k",
-        args=args,
-        val_file=None,
-        val_image_root=args.imagenet1k_val_root,
-    )
+    # val_imagenet1k_dataset = create_val_dataset(
+    #     dataset="imagenet1k",
+    #     args=args,
+    #     val_file=None,
+    #     val_image_root=args.imagenet1k_val_root,
+    # )
 
     print("len of train_dataset:", args.data_number)
     print("len of coco val/test:", len(val_coco_dataset), len(test_coco_dataset))
     print("len of flickr val/test:", len(val_flickr_dataset), len(test_flickr_dataset))
     print("len of cc3m val:", get_val_dataset_size())
-    print("len of imagenet100 val:", len(val_imagenet100_dataset))
-    print("len of imagenet1k val:", len(val_imagenet1k_dataset))
+    # print("len of imagenet100 val:", len(val_imagenet100_dataset))
+    # print("len of imagenet1k val:", len(val_imagenet1k_dataset))
 
     if args.extract_data:
         idx_list = []
@@ -1027,21 +1027,21 @@ def main(args):
         [None] * 2,
     )
 
-    val_imagenet100_loader = create_val_loader(
-        [val_imagenet100_dataset],
-        [None],
-        [args.batch_size_test],
-        [8],
-        [None],
-    )[0]
+    # val_imagenet100_loader = create_val_loader(
+    #     [val_imagenet100_dataset],
+    #     [None],
+    #     [args.batch_size_test],
+    #     [8],
+    #     [None],
+    # )[0]
 
-    val_imagenet1k_loader = create_val_loader(
-        [val_imagenet1k_dataset],
-        [None],
-        [args.batch_size_test],
-        [8],
-        [None],
-    )[0]
+    # val_imagenet1k_loader = create_val_loader(
+    #     [val_imagenet1k_dataset],
+    #     [None],
+    #     [args.batch_size_test],
+    #     [8],
+    #     [None],
+    # )[0]
 
     val_cc3m_loader = create_val_loader(
         [val_cc3m_dataset],
@@ -1633,8 +1633,8 @@ def main(args):
             "val_flickr_loader": val_flickr_loader,
             "test_flickr_loader": test_flickr_loader,
             "val_cc3m_loader": val_cc3m_loader,
-            "val_imagenet100_loader": val_imagenet100_loader,
-            "val_imagenet1k_loader": val_imagenet1k_loader,
+            # "val_imagenet100_loader": val_imagenet100_loader,
+            # "val_imagenet1k_loader": val_imagenet1k_loader,
         }
 
         (

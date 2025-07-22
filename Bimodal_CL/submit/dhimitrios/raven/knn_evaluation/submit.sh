@@ -8,10 +8,10 @@
 #SBATCH --ntasks=1
 #SBATCH --constraint="gpu"
 
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:4
 #SBATCH --mem=480000
 
-#SBATCH --time=01:59:59
+#SBATCH --time=00:59:59
 
 module purge
 module load anaconda/3/2023.03
