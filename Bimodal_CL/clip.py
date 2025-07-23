@@ -759,6 +759,8 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
         wandb.log({f"{dataset_name}_tsne_tsne": wandb.Image(tsne_path)})
         print(f"Sent {dataset_name}_pca_tsne and {dataset_name}_tsne_tsne to wandb")
 
+        exit()
+
 
 @torch.no_grad()
 def evaluate_unimodal_knn(model, args, device):
