@@ -194,7 +194,7 @@ def train(
                 val_flickr_loader=eval_objects["val_flickr_loader"],
                 test_flickr_loader=eval_objects["test_flickr_loader"],
                 val_cc3m_loader=eval_objects["val_cc3m_loader"],
-                val_imagenet100_loader=eval_objects["val_imagenet100_loader"],
+                # val_imagenet100_loader=eval_objects["val_imagenet100_loader"],
                 val_imagenet1k_loader=eval_objects["val_imagenet1k_loader"],
                 tokenizer=tokenizer,
                 device=device,
@@ -2143,16 +2143,16 @@ def evaluate(
         "flickr/test/" + key: value for key, value in test_result_flickr.items()
     }
 
-    val_result_imagenet100 = itm_eval(
-        score_val_i2t_imagenet100,
-        score_val_t2i_imagenet100,
-        val_imagenet100_loader.dataset.txt2img,
-        val_imagenet100_loader.dataset.img2txt,
-    )
-    print("imagenet100 val:", val_result_imagenet100)
-    val_result_imagenet100_wandb = {
-        "imagenet100/val/" + key: value for key, value in val_result_imagenet100.items()
-    }
+    # val_result_imagenet100 = itm_eval(
+    #     score_val_i2t_imagenet100,
+    #     score_val_t2i_imagenet100,
+    #     val_imagenet100_loader.dataset.txt2img,
+    #     val_imagenet100_loader.dataset.img2txt,
+    # )
+    # print("imagenet100 val:", val_result_imagenet100)
+    # val_result_imagenet100_wandb = {
+    #     "imagenet100/val/" + key: value for key, value in val_result_imagenet100.items()
+    # }
 
     # val_result_imagenet1k = itm_eval(
     #     score_val_i2t_imagenet1k,
@@ -2172,7 +2172,7 @@ def evaluate(
         | test_result_flickr_wandb
         | val_result_cc3m_wandb
         | cc3m_stats
-        | val_result_imagenet100_wandb
+        # | val_result_imagenet100_wandb
     )
 
     # Modality gap
