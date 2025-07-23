@@ -72,7 +72,6 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import matplotlib.cm as cmlib
-import umap
 
 import traceback
 
