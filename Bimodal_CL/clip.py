@@ -71,6 +71,8 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import matplotlib.cm as cmlib
+import umap
 
 import traceback
 
@@ -692,10 +694,10 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
     for dataset_name, num_class in (("cifar10", 10), ("cifar100", 100)):
 
         # 1 ─── load validation set ────────────────────────────────────────────
-        print(f"Loading {dataset_name} val dataloader …")
+        # print(f"Loading {dataset_name} val dataloader …")
         val_dl = create_zeroshot_dataloader(
             dataset_name=dataset_name,
-            data_folder=args.zs_dataset,
+            data_folder=dataset_name,
             image_size=args.image_res,
             train=False,
         )
@@ -714,9 +716,9 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
         print(f"{dataset_name}: features {feats.shape}, labels {labels.shape}")
 
         # 3 ─── 2-D projections ───────────────────────────────────────────────
-        print(f"Applying PCA on {dataset_name} features")
+        # print(f"Applying PCA on {dataset_name} features")
         pca_2d = PCA(n_components=2, random_state=0).fit_transform(feats)
-        print(f"Applying t-SNE on {dataset_name} features")
+        # print(f"Applying t-SNE on {dataset_name} features")
         tsne_2d = TSNE(
             n_components=2,
             perplexity=30,
@@ -726,8 +728,11 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
             n_iter=1000,
         ).fit_transform(feats)
 
+        # UMAP also
+        # umap_2d = umap.UMAP(n_components=2, random_state=0).fit_transform(feats)
+
         # 4 ─── plotting & saving ─────────────────────────────────────────────
-        cmap = cm.get_cmap("tab20", num_class)
+        cmap = cmlib.get_cmap("tab20", num_class)
         colors = [cmap(c) for c in labels]
 
         # ── PCA ──────────────────────────────────────────────────────────
@@ -740,7 +745,7 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
         pca_path = os.path.join(save_dir, f"{dataset_name}_pca.png")
         fig_pca.savefig(pca_path, dpi=300, bbox_inches="tight")
         plt.close(fig_pca)
-        print(f"Saved → {pca_path}")
+        # print(f"Saved → {pca_path}")
 
         # ── t-SNE ────────────────────────────────────────────────────────
         fig_tsne, ax_tsne = plt.subplots(figsize=(6, 5))
@@ -752,14 +757,110 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
         tsne_path = os.path.join(save_dir, f"{dataset_name}_tsne.png")
         fig_tsne.savefig(tsne_path, dpi=300, bbox_inches="tight")
         plt.close(fig_tsne)
-        print(f"Saved → {tsne_path}")
+        # print(f"Saved → {tsne_path}")
 
         # Send the image to wandb
         wandb.log({f"{dataset_name}_pca_tsne": wandb.Image(pca_path)})
         wandb.log({f"{dataset_name}_tsne_tsne": wandb.Image(tsne_path)})
-        print(f"Sent {dataset_name}_pca_tsne and {dataset_name}_tsne_tsne to wandb")
 
-        exit()
+        # ── SPHERE (3-D PCA projected to the unit sphere) ──────────────────────────
+        # 1. 3-D PCA
+        pca_3d = PCA(n_components=3, random_state=0).fit_transform(feats)
+
+        # 2. re-project every point to the unit sphere
+        sphere_xyz = pca_3d / np.linalg.norm(pca_3d, axis=1, keepdims=True)
+
+        # 3. plot
+        fig_sph = plt.figure(figsize=(6, 5))
+        ax_sph = fig_sph.add_subplot(111, projection="3d")
+
+        # scatter the points
+        ax_sph.scatter(
+            sphere_xyz[:, 0],
+            sphere_xyz[:, 1],
+            sphere_xyz[:, 2],
+            c=colors,
+            s=7,
+            alpha=0.85,
+            linewidth=0,
+        )
+
+        # optional: light wireframe reference sphere
+        u, v = np.mgrid[0 : 2 * np.pi : 40j, 0 : np.pi : 20j]
+        ax_sph.plot_wireframe(
+            np.cos(u) * np.sin(v),
+            np.sin(u) * np.sin(v),
+            np.cos(v),
+            color="gray",
+            linewidth=0.3,
+            alpha=0.25,
+        )
+
+        ax_sph.set_title(f"{dataset_name.upper()} – Sphere (3-D PCA)")
+        for axis in (ax_sph.xaxis, ax_sph.yaxis, ax_sph.zaxis):
+            axis.set_ticks([])
+
+        ax_sph.set_box_aspect([1, 1, 1])
+        fig_sph.tight_layout()
+
+        sphere_path = os.path.join(save_dir, f"{dataset_name}_sphere.png")
+        fig_sph.savefig(sphere_path, dpi=300, bbox_inches="tight")
+        plt.close(fig_sph)
+
+        # 4. log to wandb
+        wandb.log({f"{dataset_name}_sphere": wandb.Image(sphere_path)})
+
+        # ── SPHERE (3-D t-SNE ➜ unit sphere) ───────────────────────────────
+        tsne_3d = TSNE(
+            n_components=3,
+            perplexity=30,
+            metric="cosine",
+            init="pca",
+            random_state=0,
+            n_iter=1000,
+        ).fit_transform(
+            feats
+        )  # [N, 3]
+
+        sphere_xyz = tsne_3d / np.linalg.norm(tsne_3d, axis=1, keepdims=True)
+
+        fig_sph = plt.figure(figsize=(6, 5))
+        ax_sph = fig_sph.add_subplot(111, projection="3d")
+
+        ax_sph.scatter(
+            sphere_xyz[:, 0],
+            sphere_xyz[:, 1],
+            sphere_xyz[:, 2],
+            c=colors,
+            s=7,
+            alpha=0.85,
+            linewidth=0,
+        )
+
+        # optional wireframe sphere
+        u, v = np.mgrid[0 : 2 * np.pi : 40j, 0 : np.pi : 20j]
+        ax_sph.plot_wireframe(
+            np.cos(u) * np.sin(v),
+            np.sin(u) * np.sin(v),
+            np.cos(v),
+            color="gray",
+            linewidth=0.3,
+            alpha=0.25,
+        )
+
+        ax_sph.set_title(f"{dataset_name.upper()} – Sphere (3-D t-SNE)")
+        for axis in (ax_sph.xaxis, ax_sph.yaxis, ax_sph.zaxis):
+            axis.set_ticks([])
+        ax_sph.set_box_aspect([1, 1, 1])
+        fig_sph.tight_layout()
+
+        sphere_path = os.path.join(save_dir, f"{dataset_name}_sphere_tsne.png")
+        fig_sph.savefig(sphere_path, dpi=300, bbox_inches="tight")
+        plt.close(fig_sph)
+
+        wandb.log({f"{dataset_name}_sphere_tsne": wandb.Image(sphere_path)})
+
+    exit()
 
 
 @torch.no_grad()
@@ -1680,6 +1781,10 @@ def main(args):
             print(f"Training will start from step: {GlobalStep.get()}")
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
+
+    if args.unimodal_tsne_and_pca_eval:
+        unimodal_tsne_and_pca_plot(model_without_ddp, args, device)
+        exit()
 
     if args.knn_eval:
         results = evaluate_unimodal_knn(model_without_ddp, args, device)
