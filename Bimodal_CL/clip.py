@@ -195,7 +195,7 @@ def train(
                 test_flickr_loader=eval_objects["test_flickr_loader"],
                 val_cc3m_loader=eval_objects["val_cc3m_loader"],
                 # val_imagenet100_loader=eval_objects["val_imagenet100_loader"],
-                val_imagenet1k_loader=eval_objects["val_imagenet1k_loader"],
+                # val_imagenet1k_loader=eval_objects["val_imagenet1k_loader"],
                 tokenizer=tokenizer,
                 device=device,
                 args=args,
@@ -2064,14 +2064,14 @@ def evaluate(
         model_without_ddp, test_flickr_loader, tokenizer, device, args, "flickr"
     )
 
-    score_val_i2t_imagenet100, score_val_t2i_imagenet100, _ = evaluation(
-        model_without_ddp,
-        val_imagenet100_loader,
-        tokenizer,
-        device,
-        args,
-        "imagenet100",
-    )
+    # score_val_i2t_imagenet100, score_val_t2i_imagenet100, _ = evaluation(
+    #     model_without_ddp,
+    #     val_imagenet100_loader,
+    #     tokenizer,
+    #     device,
+    #     args,
+    #     "imagenet100",
+    # )
 
     # score_val_i2t_imagenet1k, score_val_t2i_imagenet1k, _ = evaluation(
     #     model_without_ddp,
