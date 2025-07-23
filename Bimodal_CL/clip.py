@@ -67,7 +67,9 @@ from dataset.cc3m_wds import (
 )
 from scheduler.temperature_scheduler import get_next_temperature
 from global_step import GlobalStep
-
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 import traceback
@@ -669,6 +671,93 @@ def evaluate_modality_gap(model, data_loader, tokenizer, device, args, dataset_n
     return {
         "modality_gap": modality_gap,
     }
+
+
+@torch.no_grad()
+def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz"):
+    """
+    Extract val-set embeddings for CIFAR-10 & CIFAR-100, build 2-D PCA and t-SNE
+    projections, colour-code by class, and save each figure as a PNG.
+
+    Parameters
+    ----------
+    model : nn.Module
+    args  : namespace  (needs .zs_dataset and .image_res)
+    device: torch.device
+    save_dir : str     Folder where images will be written.
+    """
+    os.makedirs(save_dir, exist_ok=True)
+    model.eval()
+
+    for dataset_name, num_class in (("cifar10", 10), ("cifar100", 100)):
+
+        # 1 ─── load validation set ────────────────────────────────────────────
+        print(f"Loading {dataset_name} val dataloader …")
+        val_dl = create_zeroshot_dataloader(
+            dataset_name=dataset_name,
+            data_folder=args.zs_dataset,
+            image_size=args.image_res,
+            train=False,
+        )
+
+        # 2 ─── extract features ──────────────────────────────────────────────
+        feats, labels = [], []
+        for img, lab in tqdm(val_dl, desc=f"Extracting {dataset_name} feats"):
+            img = img.to(device)
+            emb = model.vision_proj(model.visual_encoder(img))
+            emb = F.normalize(emb, dim=-1)
+            feats.append(emb.cpu())
+            labels.append(lab)
+
+        feats = torch.cat(feats).numpy()  # [N, D]
+        labels = torch.cat(labels).numpy()  # [N]
+        print(f"{dataset_name}: features {feats.shape}, labels {labels.shape}")
+
+        # 3 ─── 2-D projections ───────────────────────────────────────────────
+        print(f"Applying PCA on {dataset_name} features")
+        pca_2d = PCA(n_components=2, random_state=0).fit_transform(feats)
+        print(f"Applying t-SNE on {dataset_name} features")
+        tsne_2d = TSNE(
+            n_components=2,
+            perplexity=30,
+            metric="cosine",
+            init="pca",
+            random_state=0,
+            n_iter=1000,
+        ).fit_transform(feats)
+
+        # 4 ─── plotting & saving ─────────────────────────────────────────────
+        cmap = cm.get_cmap("tab20", num_class)
+        colors = [cmap(c) for c in labels]
+
+        # ── PCA ──────────────────────────────────────────────────────────
+        fig_pca, ax_pca = plt.subplots(figsize=(6, 5))
+        ax_pca.scatter(pca_2d[:, 0], pca_2d[:, 1], s=7, c=colors, alpha=0.8, lw=0)
+        ax_pca.set_title(f"{dataset_name.upper()} – PCA")
+        ax_pca.set_xticks([])
+        ax_pca.set_yticks([])
+        fig_pca.tight_layout()
+        pca_path = os.path.join(save_dir, f"{dataset_name}_pca.png")
+        fig_pca.savefig(pca_path, dpi=300, bbox_inches="tight")
+        plt.close(fig_pca)
+        print(f"Saved → {pca_path}")
+
+        # ── t-SNE ────────────────────────────────────────────────────────
+        fig_tsne, ax_tsne = plt.subplots(figsize=(6, 5))
+        ax_tsne.scatter(tsne_2d[:, 0], tsne_2d[:, 1], s=7, c=colors, alpha=0.8, lw=0)
+        ax_tsne.set_title(f"{dataset_name.upper()} – t-SNE")
+        ax_tsne.set_xticks([])
+        ax_tsne.set_yticks([])
+        fig_tsne.tight_layout()
+        tsne_path = os.path.join(save_dir, f"{dataset_name}_tsne.png")
+        fig_tsne.savefig(tsne_path, dpi=300, bbox_inches="tight")
+        plt.close(fig_tsne)
+        print(f"Saved → {tsne_path}")
+
+        # Send the image to wandb
+        wandb.log({f"{dataset_name}_pca_tsne": wandb.Image(pca_path)})
+        wandb.log({f"{dataset_name}_tsne_tsne": wandb.Image(tsne_path)})
+        print(f"Sent {dataset_name}_pca_tsne and {dataset_name}_tsne_tsne to wandb")
 
 
 @torch.no_grad()
@@ -2201,6 +2290,9 @@ if __name__ == "__main__":
 
     # KNN evaluation
     parser.add_argument("--knn_eval", action="store_true")
+
+    # Unimodal t-SNE and PCA evaluation
+    parser.add_argument("--unimodal_tsne_and_pca_eval", action="store_true")
 
     args = parser.parse_args()
 
