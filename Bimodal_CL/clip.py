@@ -864,6 +864,90 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
 
 
 @torch.no_grad()
+def compute_temperature_assignments(
+    model, data_loader, tokenizer, tau_min, tau_alpha, device, dataset_name
+):
+    print(f"Computing temperature assignments for {dataset_name}...")
+    print(f"Tau min: {tau_min}, Tau alpha: {tau_alpha}")
+
+    model.eval()
+
+    texts = data_loader.dataset.text
+    num_text = len(texts)
+    text_bs = 256
+    text_embeds = []
+    for i in tqdm(range(0, num_text, text_bs), desc="Extracting text features"):
+        text = texts[i : min(num_text, i + text_bs)]
+        text_input = tokenizer(
+            text,
+            padding="max_length",
+            truncation=True,
+            max_length=30,
+            return_tensors="pt",
+        ).to(device)
+        text_output = model.text_encoder(
+            text_input.input_ids,
+            attention_mask=text_input.attention_mask,
+            output_hidden_states=False,
+        )
+        text_embed = F.normalize(
+            model.text_proj(text_output.last_hidden_state[:, 0, :]), dim=-1
+        )
+        text_embeds.append(text_embed)
+    text_embeds = torch.cat(text_embeds, dim=0)
+
+    image_embeds = []
+    for batch in tqdm(data_loader, desc="Extracting image features"):
+        image = batch["image"]
+        image = image.to(device)
+        image_feat = model.visual_encoder(image)
+        image_embed = model.vision_proj(image_feat)
+        image_embed = F.normalize(image_embed, dim=-1)
+        image_embeds.append(image_embed)
+
+    image_embeds = torch.cat(image_embeds, dim=0)
+
+    print(f"Shape of image_embeds: {image_embeds.shape}")
+    print(f"Shape of text_embeds: {text_embeds.shape}")
+
+    i2t_similarity_matrix = image_embeds @ text_embeds.t()
+    t2i_similarity_matrix = text_embeds @ image_embeds.t()
+
+    i2t_temp_assignments = tau_min + tau_alpha * torch.sqrt(
+        (i2t_similarity_matrix + 1.0) / 2.0
+    )
+
+    t2i_temp_assignments = tau_min + tau_alpha * torch.sqrt(
+        (t2i_similarity_matrix + 1.0) / 2.0
+    )
+
+    i2t_positive_temp_assignments = torch.diagonal(i2t_temp_assignments).cpu().numpy()
+    t2i_positive_temp_assignments = torch.diagonal(t2i_temp_assignments).cpu().numpy()
+
+    mask = ~torch.eye(
+        i2t_similarity_matrix.size(0),
+        dtype=torch.bool,
+        device=i2t_similarity_matrix.device,
+    )
+    i2t_negative_temp_assignments = i2t_temp_assignments[mask].cpu().numpy()
+    t2i_negative_temp_assignments = t2i_temp_assignments[mask].cpu().numpy()
+
+    # Save the temperature assignments to a single pickle file
+    with open(f"{dataset_name}_temperature_assignments.pkl", "wb") as f:
+        pickle.dump(
+            {
+                "i2t_positive_temp_assignments": i2t_positive_temp_assignments,
+                "t2i_positive_temp_assignments": t2i_positive_temp_assignments,
+                "i2t_negative_temp_assignments": i2t_negative_temp_assignments,
+                "t2i_negative_temp_assignments": t2i_negative_temp_assignments,
+                "min_possible_temp": tau_min,
+                "max_possible_temp": tau_min + tau_alpha,
+            },
+            f,
+        )
+
+
+@torch.no_grad()
 def evaluate_unimodal_knn(model, args, device):
     model.eval()
 
@@ -1782,6 +1866,19 @@ def main(args):
 
         print(f"========== Loaded states from {args.checkpoint} ==========")
 
+    if args.compute_temperature_assignments:
+        for loader in [val_cc3m_loader]:
+            compute_temperature_assignments(
+                model_without_ddp,
+                loader,
+                tokenizer,
+                args.temp,
+                args.sim_based_loss_alpha,
+                device,
+                args.data,
+            )
+        exit()
+
     if args.unimodal_tsne_and_pca_eval:
         unimodal_tsne_and_pca_plot(model_without_ddp, args, device)
         exit()
@@ -2400,6 +2497,9 @@ if __name__ == "__main__":
 
     # Unimodal t-SNE and PCA evaluation
     parser.add_argument("--unimodal_tsne_and_pca_eval", action="store_true")
+
+    # Compute temperature assignments
+    parser.add_argument("--compute_temperature_assignments", action="store_true")
 
     args = parser.parse_args()
 
