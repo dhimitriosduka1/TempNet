@@ -16,7 +16,7 @@
 module purge
 module load anaconda/3/2023.03
 
-conda activate bimodal_cl
+conda activate bcl
 
 export mpcdf=1
 
