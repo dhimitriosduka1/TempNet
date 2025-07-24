@@ -20,3 +20,4 @@ checkpoint*.json
 .vscode
 cifar10
 cifar100
+*.pkl
