@@ -1219,6 +1219,8 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         clip_loss_weight,
         sim_loss_weight,
     ):
+
+        local_temperature = 0.01
         if self.world_size > 1:
             image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
             text_features = torch.cat(GatherLayer.apply(text_features), dim=0)
@@ -1249,11 +1251,11 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
                 per_sample_temp_t2i = self.temperature
                 per_sample_temp_i2t = self.temperature
             else:
-                per_sample_temp_t2i = self.temperature + self.alpha * torch.sqrt(
+                per_sample_temp_t2i = local_temperature + self.alpha * torch.sqrt(
                     (sim_t2i + 1.0) / 2.0
                 )
 
-                per_sample_temp_i2t = self.temperature + self.alpha * torch.sqrt(
+                per_sample_temp_i2t = local_temperature + self.alpha * torch.sqrt(
                     (sim_t2i.t() + 1.0) / 2.0
                 )
 
@@ -1273,7 +1275,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
             if self.disable_temo_modulation:
                 per_sample_temp_i2i = self.temperature
             else:
-                per_sample_temp_i2i = self.temperature + self.alpha * torch.sqrt(
+                per_sample_temp_i2i = local_temperature + self.alpha * torch.sqrt(
                     (sim_i2i + 1.0) / 2.0
                 )
 
@@ -1287,7 +1289,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
             if self.disable_temo_modulation:
                 per_sample_temp_t2t = self.temperature
             else:
-                per_sample_temp_t2t = self.temperature + self.alpha * torch.sqrt(
+                per_sample_temp_t2t = local_temperature + self.alpha * torch.sqrt(
                     (sim_t2t + 1.0) / 2.0
                 )
 
@@ -1330,6 +1332,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         )
 
         log_obj = {
+            "train/local_temperature": local_temperature,
             "train/temperature": self.temperature,
             "train/t2i_loss": clip_t2i_loss.item(),
             "train/i2t_loss": clip_i2t_loss.item(),
