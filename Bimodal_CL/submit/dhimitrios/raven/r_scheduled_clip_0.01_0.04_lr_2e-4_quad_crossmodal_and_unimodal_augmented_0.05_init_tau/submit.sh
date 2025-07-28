@@ -12,12 +12,12 @@
 #SBATCH --mem=480000
 
 #SBATCH --time=11:59:59
-#SBATCH --array=1-3%1
+#SBATCH --array=1-4%1
 
 module purge
 module load anaconda/3/2023.03
 
-conda activate bimodal_cl
+conda activate bcl
 
 export mpcdf=1
 
