@@ -910,40 +910,26 @@ def compute_temperature_assignments(
     print(f"Shape of text_embeds: {text_embeds.shape}")
 
     i2t_similarity_matrix = image_embeds @ text_embeds.t()
-    t2i_similarity_matrix = text_embeds @ image_embeds.t()
+    i2t_similarity_matrix_positive_pairs = torch.diagonal(i2t_similarity_matrix)
+    i2t_similarity_matrix_negative_pairs = i2t_similarity_matrix[
+        ~torch.eye(
+            i2t_similarity_matrix.size(0),
+            dtype=torch.bool,
+            device=i2t_similarity_matrix.device,
+        )
+    ]
 
-    i2t_temp_assignments = tau_min + tau_alpha * torch.sqrt(
-        (i2t_similarity_matrix + 1.0) / 2.0
-    )
-
-    t2i_temp_assignments = tau_min + tau_alpha * torch.sqrt(
-        (t2i_similarity_matrix + 1.0) / 2.0
-    )
-
-    i2t_positive_temp_assignments = torch.diagonal(i2t_temp_assignments).cpu().numpy()
-    t2i_positive_temp_assignments = torch.diagonal(t2i_temp_assignments).cpu().numpy()
-
-    mask = ~torch.eye(
-        i2t_similarity_matrix.size(0),
-        dtype=torch.bool,
-        device=i2t_similarity_matrix.device,
-    )
-    i2t_negative_temp_assignments = i2t_temp_assignments[mask].cpu().numpy()
-    t2i_negative_temp_assignments = t2i_temp_assignments[mask].cpu().numpy()
-
-    # Save the temperature assignments to a single pickle file
     with open(f"{dataset_name}_temperature_assignments.pkl", "wb") as f:
         pickle.dump(
             {
-                "i2t_positive_temp_assignments": i2t_positive_temp_assignments,
-                "t2i_positive_temp_assignments": t2i_positive_temp_assignments,
-                "i2t_negative_temp_assignments": i2t_negative_temp_assignments,
-                "t2i_negative_temp_assignments": t2i_negative_temp_assignments,
-                "min_possible_temp": tau_min,
-                "max_possible_temp": tau_min + tau_alpha,
+                "i2t_similarity_matrix_positive_pairs": i2t_similarity_matrix_positive_pairs,
+                "i2t_similarity_matrix_negative_pairs": i2t_similarity_matrix_negative_pairs,
             },
             f,
         )
+
+    print(f"Saved similarity matrices to {dataset_name}_temperature_assignments.pkl")
+    exit()
 
 
 @torch.no_grad()

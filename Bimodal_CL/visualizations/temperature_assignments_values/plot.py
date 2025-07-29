@@ -3,10 +3,16 @@
 Side-by-side histograms of similarity distributions for
 positive/negative image–text pairs at different training stages.
 
-New in this version
--------------------
-• One figure with two subplots (positive | negative) instead of separate PDFs.
-• Output file name:  <output_dir>/similarity_distributions.pdf
+Changes in this version (2025-07-29)
+------------------------------------
+• **True histograms** (with optional KDE overlay) instead of assuming
+  pre-computed densities.
+• One PDF containing two sub-plots (positive | negative).
+• New CLI flags:
+  – `--bins`      : number of bins (default 30)
+  – `--kde`       : add a smooth Gauss-KDE curve on top of each histogram
+  – `--no_density`: plot raw counts instead of probability densities
+• Output file name: `<output_dir>/similarity_distributions.pdf`
 • All previous CLI flags (`--neg_subset`, `--seed`, ...) still work.
 """
 
@@ -24,17 +30,19 @@ from scipy.stats import gaussian_kde
 
 # -----------------------------------------------------------------------------
 # Plotting style --------------------------------------------------------------
-plt.style.use(["science", "no-latex"])
+plt.style.use(["science"])
 plt.rcParams.update(
     {
         "figure.facecolor": "white",
         "axes.facecolor": "white",
-        "font.size": 9,
+        "savefig.facecolor": "white",
+        "savefig.edgecolor": "white",
+        "font.size": 9,  # base
         "axes.labelsize": 12,
-        "axes.titlesize": 14,
-        "xtick.labelsize": 10,
-        "ytick.labelsize": 10,
-        "legend.fontsize": 16,
+        "axes.titlesize": 12,
+        "xtick.labelsize": 13,
+        "ytick.labelsize": 13,
+        "legend.fontsize": 9,
     }
 )
 
@@ -49,10 +57,12 @@ COLORS = {
     "text": "#2C3E50",
 }
 
-
 # -----------------------------------------------------------------------------
 # Helpers ---------------------------------------------------------------------
+
+
 def load_pickle(path: Path):
+    """Load a pickle file with `rb` mode."""
     with path.open("rb") as f:
         return pickle.load(f)
 
@@ -60,7 +70,19 @@ def load_pickle(path: Path):
 def maybe_sample(
     values: np.ndarray, subset: float | int | None, rng: np.random.Generator
 ):
-    """Return `values` or a random subset thereof."""
+    """Return `values` or a random subset thereof.
+
+    Parameters
+    ----------
+    values : np.ndarray
+        1-D array of similarity values.
+    subset : float | int | None
+        If `None`, return all values.
+        If 0 < subset ≤ 1, treat as fraction of rows.
+        Else treat as absolute number of rows.
+    rng : np.random.Generator
+        Random generator for reproducible subsampling.
+    """
     if subset is None:
         return values
     n = len(values)
@@ -76,42 +98,63 @@ def maybe_sample(
 
 # -----------------------------------------------------------------------------
 # Plotting --------------------------------------------------------------------
+
+
 def create_histograms_side_by_side(
     pairs: list[dict[str, object]],
     out_path: Path,
-    alpha_fill: float = 0.7,
-    alpha_line: float = 0.9,
+    *,
+    bins: int = 30,
+    density: bool = True,
+    add_kde: bool = False,
+    alpha_fill: float = 0.6,
+    alpha_edge: float = 0.9,
 ):
-    """Draw two histograms (positive & negative) side by side and save."""
+    """Draw two histograms (positive & negative) side-by-side and save.
+
+    Parameters
+    ----------
+    pairs : list
+        Output of :func:`build_pairs` (len == 2).
+    out_path : pathlib.Path
+        Where to save the resulting PDF.
+    bins : int
+        Number of histogram bins.
+    density : bool
+        If *True*, normalise bars so area = 1 (probability density).
+    add_kde : bool
+        If *True*, overlay a Gaussian-KDE curve.
+    """
     if len(pairs) != 2:
         raise ValueError("Expected exactly two pair configs (positive, negative).")
 
     fig, axes = plt.subplots(1, 2, figsize=(8, 3.6), sharey=True)
-
     data_min, data_max = -0.5, 0.8
-    x_smooth = np.linspace(data_min, data_max, 400)
 
     for ax, cfg in zip(axes, pairs):
         for s in cfg["series"]:
-            y_smooth = s["values"]
-
-            ax.fill_between(
-                x_smooth,
-                y_smooth,
-                alpha=alpha_fill,
+            values = np.asarray(s["values"]).ravel()
+            # Histogram bars
+            ax.hist(
+                values,
+                bins=bins,
+                range=(data_min, data_max),
+                density=density,
                 color=s["color"],
-                linewidth=0,
+                alpha=alpha_fill,
+                edgecolor=s["dark_color"],
+                linewidth=1.2,
                 label=s["label"],
             )
-            ax.plot(
-                x_smooth,
-                y_smooth,
-                color=s["dark_color"],
-                linewidth=2.0,
-                alpha=alpha_line,
-            )
+            # Optional KDE overlay
+            if add_kde:
+                kde = gaussian_kde(values)
+                x = np.linspace(data_min, data_max, 400)
+                ax.plot(
+                    x, kde(x), color=s["dark_color"], linewidth=2.0, alpha=alpha_edge
+                )
 
-        # axis styling
+        # Axis styling
         ax.set_title(cfg["title"], pad=6, fontsize=18, color=COLORS["text"])
         ax.set_xlabel("Similarity", fontsize=16, color=COLORS["text"])
         ax.set_xlim(data_min, data_max)
@@ -119,9 +162,11 @@ def create_histograms_side_by_side(
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    axes[0].set_ylabel("Density", fontsize=16, color=COLORS["text"])
+    axes[0].set_ylabel(
+        "Density" if density else "Count", fontsize=16, color=COLORS["text"]
+    )
 
-    # shared legend (bottom-center)
+    # Shared legend (bottom-center)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles,
@@ -141,12 +186,20 @@ def create_histograms_side_by_side(
     plt.close(fig)
 
 
+# -----------------------------------------------------------------------------
+# Data preparation ------------------------------------------------------------
+
+
 def build_pairs(
     datasets: dict[str, dict[str, np.ndarray]],
     neg_subset: float | int | None,
     rng: np.random.Generator,
 ):
-    """Return configs for positive & negative similarity plots."""
+    """Return configs for positive & negative similarity plots.
+
+    The structure returned here is consumed by
+    :func:`create_histograms_side_by_side`.
+    """
     positive = {
         "title": "Positive Pairs",
         "series": [
@@ -208,7 +261,7 @@ def build_pairs(
 
     if neg_subset is not None:
         for s in negative_series:
-            s["values"] = maybe_sample(s["values"], neg_subset, rng)
+            s["values"] = maybe_sample(np.asarray(s["values"]).ravel(), neg_subset, rng)
 
     negative = {
         "title": "Negative Pairs",
@@ -220,6 +273,8 @@ def build_pairs(
 
 # -----------------------------------------------------------------------------
 # Main ------------------------------------------------------------------------
+
+
 def main():
     p = argparse.ArgumentParser(description="Plot side-by-side similarity histograms.")
     p.add_argument(
@@ -236,10 +291,21 @@ def main():
         "--neg_subset",
         type=float,
         default=None,
-        help="Subset of *negative* pairs to plot "
-        "(fraction if 0<x≤1, else absolute count).",
+        help="Subset of *negative* pairs to plot (fraction if 0<x≤1, else absolute count).",
     )
     p.add_argument("--seed", type=int, default=0, help="RNG seed for sampling.")
+    p.add_argument("--bins", type=int, default=100, help="Number of histogram bins.")
+    p.add_argument(
+        "--no_density",
+        action="store_true",
+        help="Plot raw counts instead of probability densities.",
+    )
+    p.add_argument(
+        "--kde",
+        action="store_true",
+        help="Add a smooth Gaussian-KDE curve on top of each histogram.",
+    )
+
     args = p.parse_args()
 
     rng = np.random.default_rng(args.seed)
@@ -254,7 +320,13 @@ def main():
 
     pairs = build_pairs(datasets, args.neg_subset, rng)
     out_path = out_dir / "similarity_distributions.pdf"
-    create_histograms_side_by_side(pairs, out_path)
+    create_histograms_side_by_side(
+        pairs,
+        out_path,
+        bins=args.bins,
+        density=True,
+        add_kde=args.kde,
+    )
 
 
 if __name__ == "__main__":
