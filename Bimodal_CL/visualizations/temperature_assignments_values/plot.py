@@ -1,39 +1,50 @@
+#!/usr/bin/env python3
+"""
+Side-by-side histograms of similarity distributions for
+positive/negative image–text pairs at different training stages.
+
+New in this version
+-------------------
+• One figure with two subplots (positive | negative) instead of separate PDFs.
+• Output file name:  <output_dir>/similarity_distributions.pdf
+• All previous CLI flags (`--neg_subset`, `--seed`, ...) still work.
+"""
+
+from __future__ import annotations
+
+import argparse
 import os
+from pathlib import Path
 import pickle
+
 import numpy as np
 import matplotlib.pyplot as plt
+import scienceplots  # noqa: F401
 from scipy.stats import gaussian_kde
-import seaborn as sns
-import scienceplots
 
 # -----------------------------------------------------------------------------
 # Plotting style --------------------------------------------------------------
-plt.style.use(["science"])
-sns.set_palette("husl")
-
+plt.style.use(["science", "no-latex"])
 plt.rcParams.update(
     {
         "figure.facecolor": "white",
         "axes.facecolor": "white",
-        "savefig.facecolor": "white",
-        "savefig.edgecolor": "white",
-        "font.size": 9,  # base
+        "font.size": 9,
         "axes.labelsize": 12,
-        "axes.titlesize": 12,
+        "axes.titlesize": 14,
         "xtick.labelsize": 10,
         "ytick.labelsize": 10,
-        "legend.fontsize": 9,
+        "legend.fontsize": 16,
     }
 )
 
-colors = {
-    "start": "#FF6B6B",  # Coral red – start of training
-    "middle": "#1f77b4",  # Blue       – end (InfoNCE)
-    "end": "#4ECDC4",  # Teal       – end (TeMo)
+COLORS = {
+    "start": "#FF6B6B",
+    "middle": "#1f77b4",
+    "end": "#4ECDC4",
     "start_dark": "#E55555",
     "middle_dark": "#1c6699",
     "end_dark": "#45B7AA",
-    "background": "#FFFFFF",
     "grid": "#E0E0E0",
     "text": "#2C3E50",
 }
@@ -41,203 +52,210 @@ colors = {
 
 # -----------------------------------------------------------------------------
 # Helpers ---------------------------------------------------------------------
-def load_pickle(path: str):
-    """Load a pickle file and return its contents."""
-    with open(path, "rb") as f:
+def load_pickle(path: Path):
+    with path.open("rb") as f:
         return pickle.load(f)
 
 
-# -----------------------------------------------------------------------------
-# Data ------------------------------------------------------------------------
-base_dir = "/BS/dduka/work/projects/TempNet/Bimodal_CL/visualizations/temperature_assignments_values"
+def maybe_sample(
+    values: np.ndarray, subset: float | int | None, rng: np.random.Generator
+):
+    """Return `values` or a random subset thereof."""
+    if subset is None:
+        return values
+    n = len(values)
+    k = (
+        max(1, int(round(subset * n)))  # fraction
+        if 0 < subset <= 1
+        else int(subset)  # absolute count
+    )
+    k = min(k, n)
+    idx = rng.choice(n, size=k, replace=False)
+    return values[idx]
 
-datasets = {
-    "sot": load_pickle(
-        os.path.join(base_dir, "common/cc3m_temperature_assignments.pkl")
-    ),
-    "eot_infonce": load_pickle(
-        os.path.join(base_dir, "infonce/cc3m_temperature_assignments.pkl")
-    ),
-    "eot_temo": load_pickle(
-        os.path.join(base_dir, "temo/cc3m_temperature_assignments.pkl")
-    ),
-}
 
 # -----------------------------------------------------------------------------
-# Template describing what to plot --------------------------------------------
-pairs = [
-    {
-        "title": "Positive Pairs Similarity Distribution",
-        "tag": "i2t_positive",
+# Plotting --------------------------------------------------------------------
+def create_histograms_side_by_side(
+    pairs: list[dict[str, object]],
+    out_path: Path,
+    alpha_fill: float = 0.7,
+    alpha_line: float = 0.9,
+):
+    """Draw two histograms (positive & negative) side by side and save."""
+    if len(pairs) != 2:
+        raise ValueError("Expected exactly two pair configs (positive, negative).")
+
+    fig, axes = plt.subplots(1, 2, figsize=(8, 3.6), sharey=True)
+
+    data_min, data_max = -0.5, 0.8
+    x_smooth = np.linspace(data_min, data_max, 400)
+
+    for ax, cfg in zip(axes, pairs):
+        for s in cfg["series"]:
+            y_smooth = s["values"]
+
+            ax.fill_between(
+                x_smooth,
+                y_smooth,
+                alpha=alpha_fill,
+                color=s["color"],
+                linewidth=0,
+                label=s["label"],
+            )
+            ax.plot(
+                x_smooth,
+                y_smooth,
+                color=s["dark_color"],
+                linewidth=2.0,
+                alpha=alpha_line,
+            )
+
+        # axis styling
+        ax.set_title(cfg["title"], pad=6, fontsize=18, color=COLORS["text"])
+        ax.set_xlabel("Similarity", fontsize=16, color=COLORS["text"])
+        ax.set_xlim(data_min, data_max)
+        ax.grid(True, alpha=0.3, color=COLORS["grid"], linewidth=0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    axes[0].set_ylabel("Density", fontsize=16, color=COLORS["text"])
+
+    # shared legend (bottom-center)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        ncol=len(labels),
+        frameon=False,
+        bbox_to_anchor=(0.5, -0.11),
+        fontsize=16,
+        handletextpad=0.6,
+    )
+
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Saved {out_path}")
+    plt.close(fig)
+
+
+def build_pairs(
+    datasets: dict[str, dict[str, np.ndarray]],
+    neg_subset: float | int | None,
+    rng: np.random.Generator,
+):
+    """Return configs for positive & negative similarity plots."""
+    positive = {
+        "title": "Positive Pairs",
         "series": [
             {
-                "label": "Start of training",
+                "label": "Initial distribution",
                 "values": datasets["sot"]["i2t_similarity_matrix_positive_pairs"]
                 .cpu()
                 .numpy(),
-                "color": colors["start"],
-                "dark_color": colors["start_dark"],
+                "color": COLORS["start"],
+                "dark_color": COLORS["start_dark"],
             },
             {
-                "label": "End of training (InfoNCE)",
+                "label": "Final (InfoNCE)",
                 "values": datasets["eot_infonce"][
                     "i2t_similarity_matrix_positive_pairs"
                 ]
                 .cpu()
                 .numpy(),
-                "color": colors["middle"],
-                "dark_color": colors["middle_dark"],
+                "color": COLORS["middle"],
+                "dark_color": COLORS["middle_dark"],
             },
             {
-                "label": "End of training (TeMo)",
+                "label": "Final (TeMo)",
                 "values": datasets["eot_temo"]["i2t_similarity_matrix_positive_pairs"]
                 .cpu()
                 .numpy(),
-                "color": colors["end"],
-                "dark_color": colors["end_dark"],
+                "color": COLORS["end"],
+                "dark_color": COLORS["end_dark"],
             },
         ],
-    },
-    {
-        "title": "Negative Pairs Similarity Distribution",
-        "tag": "i2t_negative",
-        "series": [
-            {
-                "label": "Start of training",
-                "values": datasets["sot"]["i2t_similarity_matrix_negative_pairs"]
-                .cpu()
-                .numpy(),
-                "color": colors["start"],
-                "dark_color": colors["start_dark"],
-            },
-            {
-                "label": "End of training (InfoNCE)",
-                "values": datasets["eot_infonce"][
-                    "i2t_similarity_matrix_negative_pairs"
-                ]
-                .cpu()
-                .numpy(),
-                "color": colors["middle"],
-                "dark_color": colors["middle_dark"],
-            },
-            {
-                "label": "End of training (TeMo)",
-                "values": datasets["eot_temo"]["i2t_similarity_matrix_negative_pairs"]
-                .cpu()
-                .numpy(),
-                "color": colors["end"],
-                "dark_color": colors["end_dark"],
-            },
-        ],
-    },
-]
+    }
 
-# -----------------------------------------------------------------------------
-# Plotting --------------------------------------------------------------------
-output_dir = "/BS/dduka/work/projects/TempNet/Bimodal_CL/temperature_assignments_values"
-plots_dir = os.path.join(output_dir, "plots")
-os.makedirs(plots_dir, exist_ok=True)
+    negative_series = [
+        {
+            "label": "Initial distribution",
+            "values": datasets["sot"]["i2t_similarity_matrix_negative_pairs"]
+            .cpu()
+            .numpy(),
+            "color": COLORS["start"],
+            "dark_color": COLORS["start_dark"],
+        },
+        {
+            "label": "Final (InfoNCE)",
+            "values": datasets["eot_infonce"]["i2t_similarity_matrix_negative_pairs"]
+            .cpu()
+            .numpy(),
+            "color": COLORS["middle"],
+            "dark_color": COLORS["middle_dark"],
+        },
+        {
+            "label": "Final (TeMo)",
+            "values": datasets["eot_temo"]["i2t_similarity_matrix_negative_pairs"]
+            .cpu()
+            .numpy(),
+            "color": COLORS["end"],
+            "dark_color": COLORS["end_dark"],
+        },
+    ]
 
-n_bins = 5
-alpha_fill = 0.7
-alpha_line = 0.9
+    if neg_subset is not None:
+        for s in negative_series:
+            s["values"] = maybe_sample(s["values"], neg_subset, rng)
 
+    negative = {
+        "title": "Negative Pairs",
+        "series": negative_series,
+    }
 
-def create_histogram(title: str, tag: str, series: list):
-    """Draw and save a smoothed histogram for multiple series."""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    fig.patch.set_facecolor(colors["background"])
-    ax.set_facecolor("white")
-
-    data_min, data_max = -1.0, 1.0
-    bins = np.linspace(data_min, data_max, n_bins)
-
-    # -------------------------------------------------------------------------
-    # Plot each series
-    # -------------------------------------------------------------------------
-    for s in series:
-        vals = s["values"]
-        kde = gaussian_kde(vals)
-        x_smooth = np.linspace(data_min, data_max, 400)
-        y_smooth = kde(x_smooth)
-
-        ax.fill_between(
-            x_smooth,
-            y_smooth,
-            alpha=alpha_fill,
-            color=s["color"],
-            label=s["label"],  # keep label for legend handles
-            linewidth=0,
-        )
-        ax.plot(
-            x_smooth,
-            y_smooth,
-            color=s["dark_color"],
-            linewidth=2.5,
-            alpha=alpha_line,
-        )
-
-    # -------------------------------------------------------------------------
-    # Axes styling
-    # -------------------------------------------------------------------------
-    ax.set_title(title, fontsize=24, fontweight="bold", color=colors["text"], pad=20)
-    ax.set_xlabel("Similarity", fontsize=22, color=colors["text"])
-    ax.set_ylabel("Density", fontsize=22, color=colors["text"])
-    ax.grid(True, alpha=0.3, color=colors["grid"], linewidth=0.5)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_color(colors["text"])
-    ax.spines["bottom"].set_color(colors["text"])
-    ax.tick_params(colors=colors["text"], which="both", labelsize=16)
-
-    # -------------------------------------------------------------------------
-    # Statistics box
-    # -------------------------------------------------------------------------
-    # stats_lines = [
-    #     rf"{s['label']}: $\mu$={np.mean(s['values']):.4f}, $\sigma$={np.std(s['values']):.4f}"
-    #     for s in series
-    # ]
-    # ax.text(
-    #     0.02,
-    #     0.98,
-    #     "\n".join(stats_lines),
-    #     transform=ax.transAxes,
-    #     verticalalignment="top",
-    #     fontsize=12,
-    #     bbox=dict(
-    #         boxstyle="round,pad=0.5",
-    #         facecolor="white",
-    #         alpha=0.8,
-    #         edgecolor=colors["grid"],
-    #     ),
-    # )
-
-    # -------------------------------------------------------------------------
-    # Legend (moved to figure level, bottom-center)
-    # -------------------------------------------------------------------------
-    handles, labels = ax.get_legend_handles_labels()
-    fig.legend(
-        handles,
-        labels,
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.07),  # x-centre, slightly below the axes
-        ncol=len(labels),  # single row
-        fontsize=16,
-        frameon=False,
-    )
-
-    plt.tight_layout()
-    fig.savefig(
-        os.path.join(plots_dir, f"{tag}.pdf"),
-        bbox_inches="tight",
-        facecolor=colors["background"],
-        format="pdf",
-    )
-    plt.close(fig)
+    return [positive, negative]
 
 
 # -----------------------------------------------------------------------------
-# Main loop -------------------------------------------------------------------
+# Main ------------------------------------------------------------------------
+def main():
+    p = argparse.ArgumentParser(description="Plot side-by-side similarity histograms.")
+    p.add_argument(
+        "--base_dir",
+        default="/BS/dduka/work/projects/TempNet/Bimodal_CL/visualizations/temperature_assignments_values",
+        help="Root directory containing temperature-assignment pickles.",
+    )
+    p.add_argument(
+        "--output_dir",
+        default="/BS/dduka/work/projects/TempNet/Bimodal_CL/visualizations/temperature_assignments_values/plots",
+        help="Directory to save PDF plots.",
+    )
+    p.add_argument(
+        "--neg_subset",
+        type=float,
+        default=None,
+        help="Subset of *negative* pairs to plot "
+        "(fraction if 0<x≤1, else absolute count).",
+    )
+    p.add_argument("--seed", type=int, default=0, help="RNG seed for sampling.")
+    args = p.parse_args()
+
+    rng = np.random.default_rng(args.seed)
+    base = Path(os.path.expanduser(args.base_dir))
+    out_dir = Path(os.path.expanduser(args.output_dir))
+
+    datasets = {
+        "sot": load_pickle(base / "common/cc3m_temperature_assignments.pkl"),
+        "eot_infonce": load_pickle(base / "infonce/cc3m_temperature_assignments.pkl"),
+        "eot_temo": load_pickle(base / "temo/cc3m_temperature_assignments.pkl"),
+    }
+
+    pairs = build_pairs(datasets, args.neg_subset, rng)
+    out_path = out_dir / "similarity_distributions.pdf"
+    create_histograms_side_by_side(pairs, out_path)
+
+
 if __name__ == "__main__":
-    for p in pairs:
-        create_histogram(p["title"], p["tag"], p["series"])
+    main()
