@@ -75,6 +75,7 @@ import matplotlib.cm as cmlib
 
 import traceback
 
+from PIL import Image
 # =================== Loading configuration files based on the env ========================
 
 from env_config.config_manager import ConfigManager
@@ -906,9 +907,24 @@ def compute_temperature_assignments(
         text_embeds.append(text_embed)
     text_embeds = torch.cat(text_embeds, dim=0)
 
+    # Store original images for visualization
+    original_images = []
     image_embeds = []
     for batch in tqdm(data_loader, desc="Extracting image features"):
         image = batch["image"]
+        # Store original images (assuming they're PIL Images or tensors)
+        if isinstance(image, torch.Tensor):
+            # Convert tensor to PIL Image for visualization
+            for img_tensor in image:
+                # Assuming image is normalized, denormalize if needed
+                img_np = img_tensor.permute(1, 2, 0).cpu().numpy()
+                if img_np.min() < 0:  # If normalized to [-1, 1] or similar
+                    img_np = (img_np + 1) / 2  # Convert to [0, 1]
+                img_np = np.clip(img_np * 255, 0, 255).astype(np.uint8)
+                original_images.append(Image.fromarray(img_np))
+        else:
+            original_images.extend(image)
+        
         image = image.to(device)
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
@@ -929,6 +945,46 @@ def compute_temperature_assignments(
             device=i2t_similarity_matrix.device,
         )
     ]
+
+    # Find the 5 pairs with lowest similarity (positive pairs only)
+    lowest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs)[:5]
+    lowest_similarities = i2t_similarity_matrix_positive_pairs[lowest_sim_indices]
+    
+    print(f"5 lowest similarity scores: {lowest_similarities.cpu().numpy()}")
+    print(f"Corresponding indices: {lowest_sim_indices.cpu().numpy()}")
+    
+    # Create directory for saving visualizations
+    viz_dir = f"{dataset_name}_lowest_similarity_pairs"
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    # Visualize and save the 5 pairs with lowest similarity
+    for i, (idx, sim_score) in enumerate(zip(lowest_sim_indices, lowest_similarities)):
+        idx = idx.item()
+        sim_score = sim_score.item()
+        
+        # Get the corresponding image and text
+        image = original_images[idx]
+        caption = texts[idx]
+        
+        # Create visualization
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        ax.imshow(image)
+        ax.set_title(f"Similarity Score: {sim_score:.4f}\nCaption: {caption}", 
+                    fontsize=12, wrap=True, pad=20)
+        ax.axis('off')
+        
+        # Adjust layout to prevent title cutoff
+        plt.tight_layout()
+        
+        # Save the visualization
+        save_path = os.path.join(viz_dir, f"lowest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved visualization {i+1}/5: {save_path}")
+        print(f"  - Similarity: {sim_score:.4f}")
+        print(f"  - Caption: {caption[:100]}...")  # Show first 100 chars
+        print()
 
     with open(f"{dataset_name}_temperature_assignments.pkl", "wb") as f:
         pickle.dump(
