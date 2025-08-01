@@ -950,12 +950,20 @@ def compute_temperature_assignments(
     lowest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs)[:5]
     lowest_similarities = i2t_similarity_matrix_positive_pairs[lowest_sim_indices]
     
+    # Find the 5 pairs with highest similarity (positive pairs only)
+    highest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs, descending=True)[:5]
+    highest_similarities = i2t_similarity_matrix_positive_pairs[highest_sim_indices]
+    
     print(f"5 lowest similarity scores: {lowest_similarities.cpu().numpy()}")
     print(f"Corresponding indices: {lowest_sim_indices.cpu().numpy()}")
+    print(f"5 highest similarity scores: {highest_similarities.cpu().numpy()}")
+    print(f"Corresponding indices: {highest_sim_indices.cpu().numpy()}")
     
-    # Create directory for saving visualizations
-    viz_dir = f"{dataset_name}_lowest_similarity_pairs"
-    os.makedirs(viz_dir, exist_ok=True)
+    # Create directories for saving visualizations
+    viz_dir_lowest = f"{dataset_name}_lowest_similarity_pairs"
+    viz_dir_highest = f"{dataset_name}_highest_similarity_pairs"
+    os.makedirs(viz_dir_lowest, exist_ok=True)
+    os.makedirs(viz_dir_highest, exist_ok=True)
     
     # Visualize and save the 5 pairs with lowest similarity
     for i, (idx, sim_score) in enumerate(zip(lowest_sim_indices, lowest_similarities)):
@@ -977,7 +985,36 @@ def compute_temperature_assignments(
         plt.tight_layout()
         
         # Save the visualization
-        save_path = os.path.join(viz_dir, f"lowest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
+        save_path = os.path.join(viz_dir_lowest, f"lowest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved lowest similarity visualization {i+1}/5: {save_path}")
+        print(f"  - Similarity: {sim_score:.4f}")
+        print(f"  - Caption: {caption[:100]}...")  # Show first 100 chars
+        print()
+
+    # Visualize and save the 5 pairs with highest similarity
+    for i, (idx, sim_score) in enumerate(zip(highest_sim_indices, highest_similarities)):
+        idx = idx.item()
+        sim_score = sim_score.item()
+        
+        # Get the corresponding image and text
+        image = original_images[idx]
+        caption = texts[idx]
+        
+        # Create visualization
+        fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+        ax.imshow(image)
+        ax.set_title(f"Similarity Score: {sim_score:.4f}\nCaption: {caption}", 
+                    fontsize=12, wrap=True, pad=20)
+        ax.axis('off')
+        
+        # Adjust layout to prevent title cutoff
+        plt.tight_layout()
+        
+        # Save the visualization
+        save_path = os.path.join(viz_dir_highest, f"highest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
         plt.close()
         
