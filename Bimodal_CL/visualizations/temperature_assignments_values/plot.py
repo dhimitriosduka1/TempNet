@@ -268,7 +268,7 @@ def build_pairs(
         "series": negative_series,
     }
 
-    return [positive, negative]
+    return [negative, positive]
 
 
 # -----------------------------------------------------------------------------
