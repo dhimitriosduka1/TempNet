@@ -71,12 +71,14 @@ class CLIP(nn.Module):
         disable_i2i_temo_loss=False,
         disable_t2t_temo_loss=False,
         reversed_scheduler=False,
+        enable_non_modulated_unimodal_losses=False,
     ):
         super().__init__()
 
         self.temp = temp
         self.learnable_temp = learnable_temp
         self.personalized_tau = personalized_tau
+        self.enable_non_modulated_unimodal_losses = enable_non_modulated_unimodal_losses
 
         if self.learnable_temp:
             if not personalized_tau:
@@ -284,6 +286,7 @@ class CLIP(nn.Module):
                     disable_i2i_temo_loss=self.disable_i2i_temo_loss,
                     disable_t2t_temo_loss=self.disable_t2t_temo_loss,
                     reversed_scheduler=self.reversed_scheduler,
+                    enable_non_modulated_unimodal_losses=self.enable_non_modulated_unimodal_losses,
                 )
             )
         elif self.ita_type == "scheduled_sogclr_crossmodal_with_augmentations":

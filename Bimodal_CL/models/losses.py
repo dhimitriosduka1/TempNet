@@ -1179,6 +1179,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         disable_i2i_temo_loss=False,
         disable_t2t_temo_loss=False,
         reversed_scheduler=False,
+        enable_non_modulated_unimodal_losses=False,
     ):
         super(
             Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss, self
@@ -1196,7 +1197,11 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
 
         self.reversed_scheduler = reversed_scheduler
 
+        self.enable_non_modulated_unimodal_losses = enable_non_modulated_unimodal_losses
+
         print(f"===> Using disable_temo_modulation: {disable_temo_modulation}")
+
+        print(f"===> Using enable_non_modulated_unimodal_losses: {enable_non_modulated_unimodal_losses}")
 
         assert (
             total_steps is not None
@@ -1242,6 +1247,17 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
         clip_i2t_loss = F.cross_entropy(sim_clip_loss.t(), labels)
 
         info_nce_loss = (clip_i2t_loss + clip_t2i_loss) / 2
+
+        total_non_modulated = info_nce_loss
+
+        if self.enable_non_modulated_unimodal_losses:
+            i2i_similarity = image_features @ augmented_image_features.T
+            t2t_similarity = text_features @ augmented_text_features.T
+
+            i2i_loss = F.cross_entropy(i2i_similarity / self.temperature, labels)
+            t2t_loss = F.cross_entropy(t2t_similarity / self.temperature, labels)
+
+            total_non_modulated += (i2i_loss + t2t_loss)
 
         # First, compute the modulated InfoNCE loss components
         if self.disable_crossmodal_minfonce:
@@ -1326,7 +1342,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
 
         # Combine the two losses using a weighted sum
         total_loss = (
-            info_nce_loss_weight * info_nce_loss
+            info_nce_loss_weight * total_non_modulated
             + modulated_unimodal_loss_weight
             * (modulated_info_nce_loss + modulated_unimodal_loss)
         )
@@ -1342,6 +1358,7 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
             "train/sim_t2t_loss": modulated_t2t_loss.item(),
             "train/clip_loss_weight": info_nce_loss_weight,
             "train/sim_loss_weight": modulated_unimodal_loss_weight,
+            "train/total_non_modulated": total_non_modulated.item(),
         }
 
         log_obj.update(

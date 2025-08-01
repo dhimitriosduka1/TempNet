@@ -1483,6 +1483,7 @@ def main(args):
         disable_i2i_temo_loss=args.disable_i2i_temo_loss,
         disable_t2t_temo_loss=args.disable_t2t_temo_loss,
         reversed_scheduler=args.reversed_scheduler,
+        enable_non_modulated_unimodal_losses=args.enable_non_modulated_unimodal_losses,
     )
 
     model = model.to(device)
@@ -2589,6 +2590,9 @@ if __name__ == "__main__":
 
     # Compute temperature assignments
     parser.add_argument("--compute_temperature_assignments", action="store_true")
+
+    # Non-modulated unimodal losses
+    parser.add_argument("--enable_non_modulated_unimodal_losses", action="store_true")
 
     args = parser.parse_args()
 
