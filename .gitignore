@@ -2,6 +2,7 @@
 /Bimodal_CL/downstream/*
 /Bimodal_CL/flickr30k/*
 /Bimodal_CL/coco/*
+/Bimodal_CL/zsh_results/*
 __pycache__
 *.log
 output/

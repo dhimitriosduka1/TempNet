@@ -33,7 +33,7 @@ cd "${PROJECT_DIR}"
 # /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth # Cos Baseline Not Yet Submitted
 
 # DATASETS=(cifar10 cifar100)
-DATASETS=(imagenet1k)
+DATASETS=(imagenet)
 MODEL_PATHS=(
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth

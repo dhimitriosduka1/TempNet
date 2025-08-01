@@ -16,24 +16,7 @@ export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-# CLIP Baseline
-# Cos Baseline
-# M-I2I
-# M-T2T
-# M-I2T
-# M-T2I
-# Text Expert
-# Vision Expert
-# Vision and Text Expert
-# CLIP Baseline with I2I
-# CLIP Baseline with T2T 
-# CLIP Baseline with I2I and T2T
-# TeMo Baseline
-
-# /BS/dduka/work/projects/TempNet/Bimodal_CL/submit/dhimitrios/clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth # Cos Baseline Not Yet Submitted
-
-# DATASETS=(cifar10 cifar100)
-DATASETS=(imagenet1k)
+DATASETS=(imagenet)
 MODEL_PATHS=(
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/clip_vit_b16_tau_0.01_lr_8e-4/checkpoint_best.pth
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/BASELINE_CLIP_COS_0.01_0.05_VITB16/checkpoint_best.pth
@@ -56,6 +39,8 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
             --ita_type clip \
             --checkpoint $MODEL_PATH \
             --zsh_eval \
-            --zs_datafolder /BS/databases23/imagenet/original/
+            --zs_datafolder /BS/databases23/imagenet/original/ \
+            --image_encoder vit_base_patch16_224 \
+            --image_res 224
     done
 done

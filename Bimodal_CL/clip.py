@@ -90,6 +90,7 @@ from sentence_transformers import SentenceTransformer
 from mm_stats_evaluator import MMStatsEvaluator
 from running_average_tracker import RunningAverageTracker
 
+from dataset.caption_dataset import imagenet_templates
 
 def train(
     model,
@@ -445,11 +446,17 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
         dataset = datasets.CIFAR100(
             root=data_folder, download=True, train=train, transform=val_transform
         )
+    elif dataset_name == "imagenet":
+        dataset = datasets.ImageNet(
+            root='/BS/dduka/work/data/imagenet1k/', 
+            split='val', 
+            transform=val_transform,
+        )
     else:
         dataset = datasets.ImageFolder(root=data_folder, transform=val_transform)
 
     data_loader = torch.utils.data.DataLoader(
-        dataset, batch_size=512, shuffle=False, num_workers=8, pin_memory=True
+        dataset, batch_size=256, shuffle=False, num_workers=8, pin_memory=True
     )
 
     data_loader.num_samples = len(dataset)
@@ -461,12 +468,16 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
 def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
     model.eval()
 
-    print(f"===> Loading zeroshot transfer config for {dataset_name}")
-    config = eval(open(f"zeroshot_transfer/{dataset_name}_classes.py", "r").read())
-    classes, templates = config["classes"], config["templates"]
+    if dataset_name == "imagenet":
+        classes = [cls[0] for cls in data_loader.dataset.classes]
+        templates = imagenet_templates 
+    else:   
+        print(f"===> Loading zeroshot transfer config for {dataset_name}")
+        config = eval(open(f"zeroshot_transfer/{dataset_name}_classes.py", "r").read())
+        classes, templates = config["classes"], config["templates"]
 
     text_embeddings = []
-    for c in classes:
+    for c in classes: # Classes here are the string names of the classes
         texts = [template.format(c) for template in templates]
         text_inputs = tokenizer(
             texts,
@@ -492,8 +503,8 @@ def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
     topk = [1, 3, 5, 10]
     correct = {k: 0 for k in topk}
 
-    for image, label in data_loader:
-        image, label = image.to(device), label.to(device)
+    for image, label in tqdm(data_loader, desc="Evaluating zeroshot transfer"):
+        image, label = image.to(device), label.to(device) # label is the index (number) of the class
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
         image_embedding = F.normalize(image_embed, dim=-1)
