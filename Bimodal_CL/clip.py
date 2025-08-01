@@ -76,6 +76,7 @@ import matplotlib.cm as cmlib
 import traceback
 
 from PIL import Image
+
 # =================== Loading configuration files based on the env ========================
 
 from env_config.config_manager import ConfigManager
@@ -92,6 +93,7 @@ from mm_stats_evaluator import MMStatsEvaluator
 from running_average_tracker import RunningAverageTracker
 
 from dataset.caption_dataset import imagenet_templates
+
 
 def train(
     model,
@@ -449,8 +451,8 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
         )
     elif dataset_name == "imagenet":
         dataset = datasets.ImageNet(
-            root='/BS/dduka/work/data/imagenet1k/', 
-            split='val', 
+            root="/BS/dduka/work/data/imagenet1k/",
+            split="val",
             transform=val_transform,
         )
     else:
@@ -471,14 +473,14 @@ def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
 
     if dataset_name == "imagenet":
         classes = [cls[0] for cls in data_loader.dataset.classes]
-        templates = imagenet_templates 
-    else:   
+        templates = imagenet_templates
+    else:
         print(f"===> Loading zeroshot transfer config for {dataset_name}")
         config = eval(open(f"zeroshot_transfer/{dataset_name}_classes.py", "r").read())
         classes, templates = config["classes"], config["templates"]
 
     text_embeddings = []
-    for c in classes: # Classes here are the string names of the classes
+    for c in classes:  # Classes here are the string names of the classes
         texts = [template.format(c) for template in templates]
         text_inputs = tokenizer(
             texts,
@@ -505,7 +507,9 @@ def zeroshot_transfer(model, data_loader, dataset_name, tokenizer, device):
     correct = {k: 0 for k in topk}
 
     for image, label in tqdm(data_loader, desc="Evaluating zeroshot transfer"):
-        image, label = image.to(device), label.to(device) # label is the index (number) of the class
+        image, label = image.to(device), label.to(
+            device
+        )  # label is the index (number) of the class
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
         image_embedding = F.normalize(image_embed, dim=-1)
@@ -924,7 +928,7 @@ def compute_temperature_assignments(
                 original_images.append(Image.fromarray(img_np))
         else:
             original_images.extend(image)
-        
+
         image = image.to(device)
         image_feat = model.visual_encoder(image)
         image_embed = model.vision_proj(image_feat)
@@ -949,75 +953,91 @@ def compute_temperature_assignments(
     # Find the 5 pairs with lowest similarity (positive pairs only)
     lowest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs)[:5]
     lowest_similarities = i2t_similarity_matrix_positive_pairs[lowest_sim_indices]
-    
+
     # Find the 5 pairs with highest similarity (positive pairs only)
-    highest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs, descending=True)[:5]
+    highest_sim_indices = torch.argsort(
+        i2t_similarity_matrix_positive_pairs, descending=True
+    )[:5]
     highest_similarities = i2t_similarity_matrix_positive_pairs[highest_sim_indices]
-    
+
     print(f"5 lowest similarity scores: {lowest_similarities.cpu().numpy()}")
     print(f"Corresponding indices: {lowest_sim_indices.cpu().numpy()}")
     print(f"5 highest similarity scores: {highest_similarities.cpu().numpy()}")
     print(f"Corresponding indices: {highest_sim_indices.cpu().numpy()}")
-    
+
     # Create directories for saving visualizations
     viz_dir_lowest = f"{dataset_name}_lowest_similarity_pairs"
     viz_dir_highest = f"{dataset_name}_highest_similarity_pairs"
     os.makedirs(viz_dir_lowest, exist_ok=True)
     os.makedirs(viz_dir_highest, exist_ok=True)
-    
+
     # Visualize and save the 5 pairs with lowest similarity
     for i, (idx, sim_score) in enumerate(zip(lowest_sim_indices, lowest_similarities)):
         idx = idx.item()
         sim_score = sim_score.item()
-        
+
         # Get the corresponding image and text
         image = original_images[idx]
         caption = texts[idx]
-        
+
         # Create visualization
         fig, ax = plt.subplots(1, 1, figsize=(12, 8))
         ax.imshow(image)
-        ax.set_title(f"Similarity Score: {sim_score:.4f}\nCaption: {caption}", 
-                    fontsize=12, wrap=True, pad=20)
-        ax.axis('off')
-        
+        ax.set_title(
+            f"Similarity Score: {sim_score:.4f}\nCaption: {caption}",
+            fontsize=12,
+            wrap=True,
+            pad=20,
+        )
+        ax.axis("off")
+
         # Adjust layout to prevent title cutoff
         plt.tight_layout()
-        
+
         # Save the visualization
-        save_path = os.path.join(viz_dir_lowest, f"lowest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        save_path = os.path.join(
+            viz_dir_lowest, f"lowest_sim_pair_{i+1}_score_{sim_score:.4f}.png"
+        )
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
         plt.close()
-        
+
         print(f"Saved lowest similarity visualization {i+1}/5: {save_path}")
         print(f"  - Similarity: {sim_score:.4f}")
         print(f"  - Caption: {caption[:100]}...")  # Show first 100 chars
         print()
 
     # Visualize and save the 5 pairs with highest similarity
-    for i, (idx, sim_score) in enumerate(zip(highest_sim_indices, highest_similarities)):
+    for i, (idx, sim_score) in enumerate(
+        zip(highest_sim_indices, highest_similarities)
+    ):
         idx = idx.item()
         sim_score = sim_score.item()
-        
+
         # Get the corresponding image and text
         image = original_images[idx]
         caption = texts[idx]
-        
+
         # Create visualization
         fig, ax = plt.subplots(1, 1, figsize=(12, 8))
         ax.imshow(image)
-        ax.set_title(f"Similarity Score: {sim_score:.4f}\nCaption: {caption}", 
-                    fontsize=12, wrap=True, pad=20)
-        ax.axis('off')
-        
+        ax.set_title(
+            f"Similarity Score: {sim_score:.4f}\nCaption: {caption}",
+            fontsize=12,
+            wrap=True,
+            pad=20,
+        )
+        ax.axis("off")
+
         # Adjust layout to prevent title cutoff
         plt.tight_layout()
-        
+
         # Save the visualization
-        save_path = os.path.join(viz_dir_highest, f"highest_sim_pair_{i+1}_score_{sim_score:.4f}.png")
-        plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        save_path = os.path.join(
+            viz_dir_highest, f"highest_sim_pair_{i+1}_score_{sim_score:.4f}.png"
+        )
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
         plt.close()
-        
+
         print(f"Saved visualization {i+1}/5: {save_path}")
         print(f"  - Similarity: {sim_score:.4f}")
         print(f"  - Caption: {caption[:100]}...")  # Show first 100 chars
@@ -2090,7 +2110,9 @@ def main(args):
             best_epoch = epoch
 
         # Save multiple checkpoints if needed
-        if args.save_multiple_ckpt:
+        if args.save_multiple_ckpt and (
+            epoch == 0 or (epoch + 1) % 5 == 0 or epoch == max_epoch - 1
+        ):
             torch.save(
                 save_obj,
                 os.path.join(args.output_dir, f"checkpoint_{epoch}.pth"),
