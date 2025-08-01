@@ -12,6 +12,7 @@ Changes in this version (2025-07-29)
   – `--bins`      : number of bins (default 30)
   – `--kde`       : add a smooth Gauss-KDE curve on top of each histogram
   – `--no_density`: plot raw counts instead of probability densities
+  – `--temo_only` : show only the positive distribution from TeMo
 • Output file name: `<output_dir>/similarity_distributions.pdf`
 • All previous CLI flags (`--neg_subset`, `--seed`, ...) still work.
 """
@@ -110,12 +111,12 @@ def create_histograms_side_by_side(
     alpha_fill: float = 0.6,
     alpha_edge: float = 0.9,
 ):
-    """Draw two histograms (positive & negative) side-by-side and save.
+    """Draw histograms and save.
 
     Parameters
     ----------
     pairs : list
-        Output of :func:`build_pairs` (len == 2).
+        Output of :func:`build_pairs` (len == 1 for temo_only, len == 2 otherwise).
     out_path : pathlib.Path
         Where to save the resulting PDF.
     bins : int
@@ -125,11 +126,18 @@ def create_histograms_side_by_side(
     add_kde : bool
         If *True*, overlay a Gaussian-KDE curve.
     """
-    if len(pairs) != 2:
-        raise ValueError("Expected exactly two pair configs (positive, negative).")
-
-    fig, axes = plt.subplots(1, 2, figsize=(8, 3.6), sharey=True)
-    data_min, data_max = -0.5, 0.8
+    if len(pairs) == 1:
+        # Single plot for temo_only
+        fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+        axes = [ax]
+        data_min, data_max = -1.0, 1.5
+    elif len(pairs) == 2:
+        # Side-by-side plots for normal case
+        fig, axes = plt.subplots(1, 2, figsize=(8, 3.6), sharey=True)
+        data_min, data_max = -0.5, 0.8
+    else:
+        raise ValueError("Expected 1 (temo_only) or 2 pair configs.")
+    
 
     for ax, cfg in zip(axes, pairs):
         for s in cfg["series"]:
@@ -162,22 +170,29 @@ def create_histograms_side_by_side(
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    axes[0].set_ylabel(
-        "Density" if density else "Count", fontsize=16, color=COLORS["text"]
-    )
+    if len(pairs) == 1:
+        axes[0].set_ylabel(
+            "Density" if density else "Count", fontsize=16, color=COLORS["text"]
+        )
+        axes[0].set_yticks([])
+    else:
+        axes[0].set_ylabel(
+            "Density" if density else "Count", fontsize=16, color=COLORS["text"]
+        )
 
     # Shared legend (bottom-center)
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(
-        handles,
-        labels,
-        loc="lower center",
-        ncol=len(labels),
-        frameon=False,
-        bbox_to_anchor=(0.5, -0.11),
-        fontsize=16,
-        handletextpad=0.6,
-    )
+    if len(pairs) == 2:
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            ncol=len(labels),
+            frameon=False,
+            bbox_to_anchor=(0.5, -0.11),
+            fontsize=16,
+            handletextpad=0.6,
+        )
 
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,18 +209,70 @@ def build_pairs(
     datasets: dict[str, dict[str, np.ndarray]],
     neg_subset: float | int | None,
     rng: np.random.Generator,
+    temo_only: bool = False,
 ):
     """Return configs for positive & negative similarity plots.
 
     The structure returned here is consumed by
     :func:`create_histograms_side_by_side`.
     """
-    positive = {
-        "title": "Positive Pairs",
-        "series": [
+    if temo_only:
+        positive = {
+            "title": "Positive Pairs Similarity",
+            "series": [
+                {
+                    "label": "Final (TeMo)",
+                    "values": datasets["eot_temo"][
+                        "i2t_similarity_matrix_positive_pairs"
+                    ]
+                    .cpu()
+                    .numpy(),
+                    "color": COLORS["end"],
+                    "dark_color": COLORS["end_dark"],
+                }
+            ],
+        }
+
+        return [positive]
+    else:
+        positive = {
+            "title": "Positive Pairs",
+            "series": [
+                {
+                    "label": "Initial distribution",
+                    "values": datasets["sot"]["i2t_similarity_matrix_positive_pairs"]
+                    .cpu()
+                    .numpy(),
+                    "color": COLORS["start"],
+                    "dark_color": COLORS["start_dark"],
+                },
+                {
+                    "label": "Final (InfoNCE)",
+                    "values": datasets["eot_infonce"][
+                        "i2t_similarity_matrix_positive_pairs"
+                    ]
+                    .cpu()
+                    .numpy(),
+                    "color": COLORS["middle"],
+                    "dark_color": COLORS["middle_dark"],
+                },
+                {
+                    "label": "Final (TeMo)",
+                    "values": datasets["eot_temo"][
+                        "i2t_similarity_matrix_positive_pairs"
+                    ]
+                    .cpu()
+                    .numpy(),
+                    "color": COLORS["end"],
+                    "dark_color": COLORS["end_dark"],
+                },
+            ],
+        }
+
+        negative_series = [
             {
                 "label": "Initial distribution",
-                "values": datasets["sot"]["i2t_similarity_matrix_positive_pairs"]
+                "values": datasets["sot"]["i2t_similarity_matrix_negative_pairs"]
                 .cpu()
                 .numpy(),
                 "color": COLORS["start"],
@@ -214,7 +281,7 @@ def build_pairs(
             {
                 "label": "Final (InfoNCE)",
                 "values": datasets["eot_infonce"][
-                    "i2t_similarity_matrix_positive_pairs"
+                    "i2t_similarity_matrix_negative_pairs"
                 ]
                 .cpu()
                 .numpy(),
@@ -223,52 +290,26 @@ def build_pairs(
             },
             {
                 "label": "Final (TeMo)",
-                "values": datasets["eot_temo"]["i2t_similarity_matrix_positive_pairs"]
+                "values": datasets["eot_temo"]["i2t_similarity_matrix_negative_pairs"]
                 .cpu()
                 .numpy(),
                 "color": COLORS["end"],
                 "dark_color": COLORS["end_dark"],
             },
-        ],
-    }
+        ]
 
-    negative_series = [
-        {
-            "label": "Initial distribution",
-            "values": datasets["sot"]["i2t_similarity_matrix_negative_pairs"]
-            .cpu()
-            .numpy(),
-            "color": COLORS["start"],
-            "dark_color": COLORS["start_dark"],
-        },
-        {
-            "label": "Final (InfoNCE)",
-            "values": datasets["eot_infonce"]["i2t_similarity_matrix_negative_pairs"]
-            .cpu()
-            .numpy(),
-            "color": COLORS["middle"],
-            "dark_color": COLORS["middle_dark"],
-        },
-        {
-            "label": "Final (TeMo)",
-            "values": datasets["eot_temo"]["i2t_similarity_matrix_negative_pairs"]
-            .cpu()
-            .numpy(),
-            "color": COLORS["end"],
-            "dark_color": COLORS["end_dark"],
-        },
-    ]
+        negative = {
+            "title": "Negative Pairs",
+            "series": negative_series,
+        }
 
-    if neg_subset is not None:
-        for s in negative_series:
-            s["values"] = maybe_sample(np.asarray(s["values"]).ravel(), neg_subset, rng)
+        if neg_subset is not None:
+            for s in negative["series"]:
+                s["values"] = maybe_sample(
+                    np.asarray(s["values"]).ravel(), neg_subset, rng
+                )
 
-    negative = {
-        "title": "Negative Pairs",
-        "series": negative_series,
-    }
-
-    return [negative, positive]
+        return [negative, positive]
 
 
 # -----------------------------------------------------------------------------
@@ -305,6 +346,11 @@ def main():
         action="store_true",
         help="Add a smooth Gaussian-KDE curve on top of each histogram.",
     )
+    p.add_argument(
+        "--temo_only",
+        action="store_true",
+        help="Show only the positive distribution from TeMo.",
+    )
 
     args = p.parse_args()
 
@@ -318,13 +364,13 @@ def main():
         "eot_temo": load_pickle(base / "temo/cc3m_temperature_assignments.pkl"),
     }
 
-    pairs = build_pairs(datasets, args.neg_subset, rng)
+    pairs = build_pairs(datasets, args.neg_subset, rng, args.temo_only)
     out_path = out_dir / "similarity_distributions.pdf"
     create_histograms_side_by_side(
         pairs,
         out_path,
         bins=args.bins,
-        density=True,
+        density=not args.no_density,
         add_kde=args.kde,
     )
 
