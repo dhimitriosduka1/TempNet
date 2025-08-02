@@ -19,9 +19,20 @@ cd "${PROJECT_DIR}"
 DATASETS=(cifar10 cifar100 imagenet)
 MODEL_PATHS=(
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
-    /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth
+    /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_sim_clip_0.01_0.05_lr_8e-4_for_the_paper/checkpoint_best.pth
+    /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_fixed_0.5_0.5_crossmodal/checkpoint_best.pth
+    /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_8e-4_quad_crossmodal/checkpoint_best.pth
+    /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_2e-4_fixed_0.5_0.5_crossmodal_and_unimodal_augmented/checkpoint_best.pth
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_scheduled_clip_0.01_0.04_lr_2e-4_quad_crossmodal_and_unimodal_augmented/checkpoint_best.pth
 )
+
+# First check if all paths exist
+for MODEL_PATH in "${MODEL_PATHS[@]}"; do
+    if [ ! -f "$MODEL_PATH" ]; then
+        echo "Model path $MODEL_PATH does not exist"
+        exit 1
+    fi
+done
 
 for MODEL_PATH in "${MODEL_PATHS[@]}"; do
     MODEL_NAME=$(basename $(dirname "$MODEL_PATH"))
@@ -32,13 +43,12 @@ for MODEL_PATH in "${MODEL_PATHS[@]}"; do
             --use_env clip.py \
             --run_name "$DESC" \
             --data cc3m \
-            --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/${DESC}_RESNET50/ \
+            --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/${DESC}_RESNET50_FOR_THE_PAPER/ \
             --init_model \
             --use_amp \
             --zs_dataset $DATASET \
             --ita_type clip \
             --checkpoint $MODEL_PATH \
-            --zsh_eval \
-            --zs_datafolder /BS/databases23/imagenet/original/
+            --zsh_eval
     done
 done
