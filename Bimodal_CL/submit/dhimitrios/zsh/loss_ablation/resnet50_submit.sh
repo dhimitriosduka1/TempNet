@@ -37,7 +37,7 @@ done
 for MODEL_PATH in "${MODEL_PATHS[@]}"; do
     MODEL_NAME=$(basename $(dirname "$MODEL_PATH"))
     for DATASET in "${DATASETS[@]}"; do
-        DESC=ZS_${DATASET}_${MODEL_NAME}
+        DESC=ZS_${DATASET}_${MODEL_NAME}_RESNET50_FOR_THE_PAPER
 
         CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port=7800 \
             --use_env clip.py \
