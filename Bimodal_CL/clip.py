@@ -880,7 +880,14 @@ def unimodal_tsne_and_pca_plot(model, args, device, save_dir: str = "./emb_viz")
 
 @torch.no_grad()
 def compute_temperature_assignments(
-    model, data_loader, tokenizer, tau_min, tau_alpha, device, dataset_name
+    model,
+    data_loader,
+    tokenizer,
+    tau_min,
+    tau_alpha,
+    device,
+    dataset_name,
+    sim_threshold,
 ):
     print(f"Computing temperature assignments for {dataset_name}...")
     print(f"Tau min: {tau_min}, Tau alpha: {tau_alpha}")
@@ -950,20 +957,104 @@ def compute_temperature_assignments(
         )
     ]
 
-    # Find the 5 pairs with lowest similarity (positive pairs only)
-    lowest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs)[:5]
-    lowest_similarities = i2t_similarity_matrix_positive_pairs[lowest_sim_indices]
+    if sim_threshold != 0.0:
+        # Find the positive pairs which are under the threshold
+        false_negatives_indices = torch.nonzero(
+            i2t_similarity_matrix_positive_pairs < sim_threshold
+        ).squeeze()
+        false_negatives = i2t_similarity_matrix_positive_pairs[false_negatives_indices]
 
-    # Find the 5 pairs with highest similarity (positive pairs only)
-    highest_sim_indices = torch.argsort(
-        i2t_similarity_matrix_positive_pairs, descending=True
-    )[:5]
-    highest_similarities = i2t_similarity_matrix_positive_pairs[highest_sim_indices]
+        # Find the negative pairs which are above the threshold
+        false_positives_indices = torch.nonzero(
+            i2t_similarity_matrix_negative_pairs > sim_threshold
+        ).squeeze()
+        false_positives = i2t_similarity_matrix_negative_pairs[false_positives_indices]
 
-    print(f"5 lowest similarity scores: {lowest_similarities.cpu().numpy()}")
-    print(f"Corresponding indices: {lowest_sim_indices.cpu().numpy()}")
-    print(f"5 highest similarity scores: {highest_similarities.cpu().numpy()}")
-    print(f"Corresponding indices: {highest_sim_indices.cpu().numpy()}")
+        print(f"False negatives: {false_negatives.shape}")  # [N, 1]
+        print(f"False positives: {false_positives.shape}")  # [N, 1]
+
+        # Create directories for saving visualizations
+        viz_dir_false_negatives = f"{dataset_name}_false_negatives"
+        viz_dir_false_positives = f"{dataset_name}_false_positives"
+        os.makedirs(viz_dir_false_negatives, exist_ok=True)
+        os.makedirs(viz_dir_false_positives, exist_ok=True)
+
+        for i, (idx, sim_score) in enumerate(
+            zip(false_negatives_indices, false_negatives)
+        ):
+            idx = idx.item()
+            sim_score = sim_score.item()
+
+            # Get the corresponding image and text
+            image = original_images[idx]
+            caption = texts[idx]
+
+            # Create visualization
+            fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+            ax.imshow(image)
+            ax.set_title(
+                f"Similarity Score: {sim_score:.4f}\nCaption: {caption}",
+                fontsize=12,
+                wrap=True,
+                pad=20,
+            )
+            ax.axis("off")
+
+            # Adjust layout to prevent title cutoff
+            plt.tight_layout()
+
+            # Save the visualization
+            save_path = os.path.join(
+                viz_dir_false_negatives,
+                f"false_negatives_{i+1}_score_{sim_score:.4f}.png",
+            )
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            plt.close()
+
+        for i, (idx, sim_score) in enumerate(
+            zip(false_positives_indices, false_positives)
+        ):
+            idx = idx.item()
+            sim_score = sim_score.item()
+
+            # Get the corresponding image and text
+            image = original_images[idx]
+            caption = texts[idx]
+
+            # Create visualization
+            fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+            ax.imshow(image)
+            ax.set_title(
+                f"Similarity Score: {sim_score:.4f}\nCaption: {caption}",
+                fontsize=12,
+                wrap=True,
+                pad=20,
+            )
+            ax.axis("off")
+
+            # Adjust layout to prevent title cutoff
+            plt.tight_layout()
+
+            # Save the visualization
+            save_path = os.path.join(
+                viz_dir_false_positives,
+                f"false_positives_{i+1}_score_{sim_score:.4f}.png",
+            )
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            plt.close()
+
+        exit()
+
+    else:
+        # Find the 5 pairs with lowest similarity (positive pairs only)
+        lowest_sim_indices = torch.argsort(i2t_similarity_matrix_positive_pairs)[:5]
+        lowest_similarities = i2t_similarity_matrix_positive_pairs[lowest_sim_indices]
+
+        # Find the 5 pairs with highest similarity (positive pairs only)
+        highest_sim_indices = torch.argsort(
+            i2t_similarity_matrix_positive_pairs, descending=True
+        )[:5]
+        highest_similarities = i2t_similarity_matrix_positive_pairs[highest_sim_indices]
 
     # Create directories for saving visualizations
     viz_dir_lowest = f"{dataset_name}_lowest_similarity_pairs"
@@ -971,7 +1062,6 @@ def compute_temperature_assignments(
     os.makedirs(viz_dir_lowest, exist_ok=True)
     os.makedirs(viz_dir_highest, exist_ok=True)
 
-    # Visualize and save the 5 pairs with lowest similarity
     for i, (idx, sim_score) in enumerate(zip(lowest_sim_indices, lowest_similarities)):
         idx = idx.item()
         sim_score = sim_score.item()
@@ -1006,7 +1096,6 @@ def compute_temperature_assignments(
         print(f"  - Caption: {caption[:100]}...")  # Show first 100 chars
         print()
 
-    # Visualize and save the 5 pairs with highest similarity
     for i, (idx, sim_score) in enumerate(
         zip(highest_sim_indices, highest_similarities)
     ):
@@ -1986,6 +2075,7 @@ def main(args):
                 args.sim_based_loss_alpha,
                 device,
                 args.data,
+                args.sim_threshold,
             )
         exit()
 
@@ -2615,6 +2705,8 @@ if __name__ == "__main__":
 
     # Non-modulated unimodal losses
     parser.add_argument("--enable_non_modulated_unimodal_losses", action="store_true")
+
+    parser.add_argument("--sim_threshold", default=0.0, type=float)
 
     args = parser.parse_args()
 
