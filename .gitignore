@@ -22,3 +22,4 @@ checkpoint*.json
 cifar10
 cifar100
 *.pkl
+*.png

@@ -128,7 +128,7 @@ def create_histograms_side_by_side(
     """
     if len(pairs) == 1:
         # Single plot for temo_only
-        fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+        fig, ax = plt.subplots(1, 1, figsize=(16, 10))
         axes = [ax]
         data_min, data_max = -1.0, 1.5
     elif len(pairs) == 2:
@@ -163,8 +163,9 @@ def create_histograms_side_by_side(
                 )
 
         # Axis styling
-        ax.set_title(cfg["title"], pad=6, fontsize=18, color=COLORS["text"])
-        ax.set_xlabel("Similarity", fontsize=16, color=COLORS["text"])
+        ax.set_title(cfg["title"], pad=6, fontsize=38, color=COLORS["text"])
+        ax.set_xlabel("Similarity", fontsize=32, color=COLORS["text"])
+        plt.xticks(fontsize=24)
         ax.set_xlim(data_min, data_max)
         ax.grid(True, alpha=0.3, color=COLORS["grid"], linewidth=0.5)
         ax.spines["top"].set_visible(False)
@@ -172,7 +173,7 @@ def create_histograms_side_by_side(
 
     if len(pairs) == 1:
         axes[0].set_ylabel(
-            "Density" if density else "Count", fontsize=16, color=COLORS["text"]
+            "Density" if density else "Count", fontsize=32, color=COLORS["text"]
         )
         axes[0].set_yticks([])
     else:
@@ -365,7 +366,7 @@ def main():
     }
 
     pairs = build_pairs(datasets, args.neg_subset, rng, args.temo_only)
-    out_path = out_dir / "similarity_distributions.pdf"
+    out_path = out_dir / "similarity_distributions.svg"
     create_histograms_side_by_side(
         pairs,
         out_path,
