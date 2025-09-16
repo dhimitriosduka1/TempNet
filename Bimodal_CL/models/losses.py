@@ -1199,6 +1199,8 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
 
         self.enable_non_modulated_unimodal_losses = enable_non_modulated_unimodal_losses
 
+        print(f"===> Using scheduler: {self.clip_scheduled_loss_type}")
+
         print(f"===> Using disable_temo_modulation: {disable_temo_modulation}")
 
         print(f"===> Using enable_non_modulated_unimodal_losses: {enable_non_modulated_unimodal_losses}")
@@ -1329,6 +1331,13 @@ class Scheduled_Crossmodal_CLIP_With_Augmentations_And_Unimodal_Loss(nn.Module):
 
             info_nce_loss_weight = clip_loss_weight
             modulated_unimodal_loss_weight = sim_loss_weight
+        elif self.clip_scheduled_loss_type == "step":
+            if normalized_current_step < 0.5:
+                info_nce_loss_weight = 1.0
+                modulated_unimodal_loss_weight = 0.0
+            else:
+                info_nce_loss_weight = 0.0
+                modulated_unimodal_loss_weight = 1.0
         else:
             raise ValueError(
                 f"Unknown clip_scheduled_loss_type: {self.clip_scheduled_loss_type}"
