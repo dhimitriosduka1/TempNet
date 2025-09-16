@@ -17,7 +17,7 @@
 module purge
 module load anaconda/3/2023.03
 
-conda activate bimodal_cl
+conda activate bimodal_cl_env
 
 export mpcdf=1
 
@@ -31,7 +31,7 @@ ITA_TYPE=scheduled_crossmodal_with_augmentations_and_unimodal_clip_loss
 BASE_TAU=0.01
 ALPHA=0.04
 
-DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD_CROSSMODAL_AND_UNIMODAL_AUGMENTED_LINEAR_SCHEDULER
+DESC=R_SCHEDULED_CLIP_${BASE_TAU}_${ALPHA}_${LR}_QUAD_CROSSMODAL_AND_UNIMODAL_AUGMENTED_LINEAR_SCHEDULER_
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 python3 -m torch.distributed.launch --nproc_per_node=4 --master_port=4820 \
     --use_env clip.py \
