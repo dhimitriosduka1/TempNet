@@ -16,7 +16,7 @@ export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-DATASETS=(cifar10 cifar100 imagenet)
+DATASETS=(flowers102)
 MODEL_PATHS=(
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth

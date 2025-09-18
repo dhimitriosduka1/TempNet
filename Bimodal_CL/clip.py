@@ -426,6 +426,9 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
     elif dataset_name == "cifar100":
         mean = (0.5071, 0.4867, 0.4408)
         std = (0.2675, 0.2565, 0.2761)
+    elif dataset_name == "flowers102":
+        mean = (0.485, 0.456, 0.406)   # ImageNet mean (commonly used for flowers102)
+        std = (0.229, 0.224, 0.225)
     else:
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
@@ -454,6 +457,13 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
             root="/BS/dduka/work/data/imagenet1k/",
             split="val",
             transform=val_transform,
+        )
+    elif dataset_name == "flowers102":
+        dataset = datasets.Flowers102(
+            root=data_folder,
+            split="val",
+            transform=val_transform,
+            download=True,
         )
     else:
         dataset = datasets.ImageFolder(root=data_folder, transform=val_transform)
