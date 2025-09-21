@@ -1,22 +1,7 @@
-#!/bin/bash
-
-#SBATCH --job-name cc3m
-#SBATCH --partition gpu20
-
-#SBATCH --time=01:59:00
-
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:4
-
-#SBATCH -o /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.out
-#SBATCH -e /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
-
 export mpi=1
 PROJECT_DIR="/BS/dduka/work/projects/old_projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
-DATASETS=(flowers102)
 MODEL_PATHS=(
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_tau_0.01_lr_8e-4/checkpoint_best.pth
     /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/r_clip_cos_0.01_0.05_lr_8e-4/checkpoint_best.pth
@@ -25,20 +10,16 @@ MODEL_PATHS=(
 
 for MODEL_PATH in "${MODEL_PATHS[@]}"; do
     MODEL_NAME=$(basename $(dirname "$MODEL_PATH"))
-    for DATASET in "${DATASETS[@]}"; do
-        DESC=ZS_${DATASET}_${MODEL_NAME}
-
         CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.launch --nproc_per_node=1 --master_port=7800 \
             --use_env clip.py \
-            --run_name "$DESC" \
+            --run_name ${MODEL_NAME}_EEEdasdssads \
             --data cc3m \
-            --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/${DESC}_RESNET50/ \
+            --output_dir /BS/dduka/work/training_metadata/bimodal_cl/dhimitrios/${MODEL_NAME}_ZSH_EVAL_REMOVEdasdsda_ \
             --init_model \
             --use_amp \
-            --zs_dataset $DATASET \
+            --zs_dataset fgvc-aircraft oxford-pets eurosat country211 dtd sun397 \
             --ita_type clip \
             --checkpoint $MODEL_PATH \
             --zsh_eval \
             --zs_datafolder /BS/databases23/imagenet/original/
-    done
 done
