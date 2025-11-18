@@ -13,7 +13,7 @@
 #SBATCH -e /BS/dduka/work/logs/bimodal_cl/%A_%a_%x_%j_%N.err
 
 export mpi=1
-PROJECT_DIR="/BS/dduka/work/projects/TempNet/Bimodal_CL"
+PROJECT_DIR="/BS/dduka/work/projects/old_projects/TempNet/Bimodal_CL"
 cd "${PROJECT_DIR}"
 
 DATASETS=(flowers102)

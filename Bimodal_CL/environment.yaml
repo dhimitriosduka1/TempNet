@@ -9,9 +9,9 @@ dependencies:
   - torchaudio
   - scikit-learn
   - pip:
-    - timm==0.5.4
-    - transformers==4.11.0
-    - tokenizers
+    - timm==1.0.15
+    - transformers==4.51.3
+    - tokenizers=0.21.1
     - wandb
     - tqdm
     - webdataset

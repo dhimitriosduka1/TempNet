@@ -94,6 +94,8 @@ from running_average_tracker import RunningAverageTracker
 
 from dataset.caption_dataset import imagenet_templates
 
+from wandb.sdk.data_types.table import Table
+
 
 def train(
     model,
@@ -418,17 +420,12 @@ def train(
 
 
 def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=False):
-    assert dataset_name in ["cifar10", "cifar100", "imagenet"]
-
     if dataset_name == "cifar10":
         mean = (0.4914, 0.4822, 0.4465)
         std = (0.2023, 0.1994, 0.2010)
     elif dataset_name == "cifar100":
         mean = (0.5071, 0.4867, 0.4408)
         std = (0.2675, 0.2565, 0.2761)
-    elif dataset_name == "flowers102":
-        mean = (0.485, 0.456, 0.406)   # ImageNet mean (commonly used for flowers102)
-        std = (0.229, 0.224, 0.225)
     else:
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
@@ -446,25 +443,89 @@ def create_zeroshot_dataloader(dataset_name, data_folder, image_size, train=Fals
 
     if dataset_name == "cifar10":
         dataset = datasets.CIFAR10(
-            root=data_folder, download=True, train=train, transform=val_transform
+            root="/scratch/inf0/user/dduka",
+            download=True,
+            train=train,
+            transform=val_transform,
         )
     elif dataset_name == "cifar100":
         dataset = datasets.CIFAR100(
-            root=data_folder, download=True, train=train, transform=val_transform
+            root="/scratch/inf0/user/dduka",
+            download=True,
+            train=train,
+            transform=val_transform,
         )
     elif dataset_name == "imagenet":
         dataset = datasets.ImageNet(
-            root="/BS/dduka/work/data/imagenet1k/",
+            root="/BS/databases05/imageNet1K",
             split="val",
             transform=val_transform,
         )
-    elif dataset_name == "flowers102":
-        dataset = datasets.Flowers102(
-            root=data_folder,
-            split="val",
+    elif dataset_name == "sun397":
+        dataset = datasets.SUN397(root="/BS/databases03", transform=val_transform)
+        print(f"Classes to index in SUN397: {dataset.class_to_idx}")
+    elif dataset_name == "fgvc-aircraft":
+        dataset = datasets.FGVCAircraft(
+            root="/scratch/inf0/user/dduka/ds/",
+            split="test",
+            download=True,
+            transform=val_transform,
+        )
+        print(f"Classes to index in FGVCArcraft: {dataset.class_to_idx}")
+    elif dataset_name == "oxford-pets":
+        dataset = datasets.OxfordIIITPet(
+            root="/scratch/inf0/user/dduka",
+            download=True,
+            transform=val_transform,
+            split="test",
+        )
+        print(f"Classes to index in OxfordIIITPet: {dataset.class_to_idx}")
+    # elif dataset_name == "flowers102":
+    #     dataset = datasets.Flowers102(
+    #         root="/scratch/inf0/user/dduka",
+    #         download=True,
+    #         split="test",
+    #         transform=val_transform,
+    #     )
+    elif dataset_name == "eurosat":
+        dataset = datasets.EuroSAT(
+            root="/scratch/inf0/user/dduka",
+            download=True,
+            transform=val_transform,
+        )
+        print(f"Classes to index in EuroSAT: {dataset.class_to_idx}")
+    elif dataset_name == "country211":
+        dataset = datasets.Country211(
+            root="/scratch/inf0/user/dduka",
+            download=True,
+            split="test",
+            transform=val_transform,
+        )
+        print(f"Classes to index in Country211: {dataset.class_to_idx}")
+    # elif dataset_name == "stanford-cars":
+    #     dataset = datasets.StanfordCars(
+    #         root="/scratch/inf0/user/dduka",
+    #         split="test",
+    #         transform=val_transform,
+    #         download=True,
+    #     )
+    #     print(f"Classes to index in StanfordCars: {dataset.class_to_idx}")
+    elif dataset_name == "food101":
+        dataset = datasets.Food101(
+            root="/scratch/inf0/user/dduka",
+            split="test",
             transform=val_transform,
             download=True,
         )
+        print(f"Classes to index in Food101: {dataset.class_to_idx}")
+    elif dataset_name == "dtd":
+        dataset = datasets.DTD(
+            root="/scratch/inf0/user/dduka",
+            split="test",
+            transform=val_transform,
+            download=True,
+        )
+        print(f"Classes to index in DTD: {dataset.class_to_idx}")
     else:
         dataset = datasets.ImageFolder(root=data_folder, transform=val_transform)
 
@@ -1409,7 +1470,18 @@ def main(args):
     print("Creating retrieval dataset")
 
     if args.data in ["sbu", "cc3m", "cc12m"]:
-        train_dataset = create_train_dataset("re", args)
+        from torch.utils.data import Dataset
+
+        class DummyDataset(Dataset):
+            def __len__(self):
+                return 1  # pretend it has 1 sample
+
+            def __getitem__(self, idx):
+                return None
+
+        train_dataset = DummyDataset()
+
+        # train_dataset = create_train_dataset("re", args)
     elif args.data == "imagenet100":
         train_dataset = create_train_dataset("imagenet100", args)
     elif args.data == "imagenet1k":
@@ -1549,17 +1621,8 @@ def main(args):
     # DD
     print(f"===> Creating zeroshot dataloader for {args.zs_dataset}")
 
-    zs_dataset = args.zs_dataset
-    zeroshot_dataloader = None
-
+    zs_datasets = args.zs_dataset
     zsh_eval = args.zsh_eval
-
-    if zsh_eval:
-        zeroshot_dataloader = create_zeroshot_dataloader(
-            dataset_name=zs_dataset,
-            data_folder=zs_dataset,
-            image_size=args.image_res,
-        )
 
     if args.data == "imagenet100" or args.data == "imagenet1k":
         total_steps = args.epochs * len(train_dataset)
@@ -2101,18 +2164,39 @@ def main(args):
         exit()
 
     if zsh_eval:
-        zsh_results = zeroshot_transfer(
-            model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device
+        zsh_result_table = wandb.Table(
+            columns=[
+                "dataset",
+                "zeroshot_top1",
+                "zeroshot_top3",
+                "zeroshot_top5",
+                "zeroshot_top10",
+            ]
         )
-        print("finished zeroshot transfer")
-        print(zsh_results)
 
-        # Write also to a file in a directory called zsh_results
-        os.makedirs("zsh_results", exist_ok=True)
-        with open(f"zsh_results/{args.run_name}.json", "w") as f:
-            json.dump(zsh_results, f)
+        for zs_dataset in zs_datasets:
+            print(f"Start zeroshot transfer evaluation on {zs_dataset}")
+            zeroshot_dataloader = create_zeroshot_dataloader(
+                dataset_name=zs_dataset,
+                data_folder=zs_dataset,
+                image_size=args.image_res,
+            )
 
-        wandb.log({"zsh_results": zsh_results})
+            zsh_results = zeroshot_transfer(
+                model_without_ddp, zeroshot_dataloader, zs_dataset, tokenizer, device
+            )
+
+            zsh_result_table.add_data(
+                zs_dataset,
+                zsh_results["zeroshot_top1"],
+                zsh_results["zeroshot_top3"],
+                zsh_results["zeroshot_top5"],
+                zsh_results["zeroshot_top10"],
+            )
+
+            print(zsh_results)
+
+        wandb.log({"zero_shot_summary": zsh_result_table})
         wandb.finish()
         exit()
 
@@ -2568,7 +2652,12 @@ if __name__ == "__main__":
     parser.add_argument("--vis_prototypes", action="store_true")
 
     # zero-shot transfer
-    parser.add_argument("--zs_dataset", choices=["cifar10", "cifar100", "imagenet"])
+    parser.add_argument(
+        "--zs_dataset",
+        nargs="+",  # one or more values
+        help="One or more datasets (e.g., --zs_dataset cifar10 imagenet)",
+    )
+
     parser.add_argument(
         "--zs_datafolder", default="./datasets", type=str
     )  # I don't use this.
