@@ -28,6 +28,7 @@ from models.losses import (
     Scheduled_Crossmodal_Cosine_CLIP_With_Augmentations_And_Unimodal_Loss,
     SogCLR_With_Cosine_And_Unimodal_Loss,
     CLIP_with_TempNet_Loss,
+    DySTreSS_Loss,
 )
 
 import torch
@@ -72,6 +73,7 @@ class CLIP(nn.Module):
         disable_t2t_temo_loss=False,
         reversed_scheduler=False,
         enable_non_modulated_unimodal_losses=False,
+        dystress_mode="vanilla",
     ):
         super().__init__()
 
@@ -79,6 +81,8 @@ class CLIP(nn.Module):
         self.learnable_temp = learnable_temp
         self.personalized_tau = personalized_tau
         self.enable_non_modulated_unimodal_losses = enable_non_modulated_unimodal_losses
+
+        self.dystress_mode = dystress_mode
 
         if self.learnable_temp:
             if not personalized_tau:
@@ -328,6 +332,14 @@ class CLIP(nn.Module):
                 world_size=world_size,
                 feature_dim=embed_dim,
                 rho=rho,
+            )
+        elif self.ita_type == "dystress_loss":
+            print("Using DySTreSS_Loss")
+            self.criterion = DySTreSS_Loss(
+                world_size=world_size,
+                tau_min=self.temp,
+                tau_max=sim_based_loss_alpha,
+                dystress_mode=self.dystress_mode,
             )
         else:
             raise NotImplementedError
@@ -623,6 +635,11 @@ class CLIP(nn.Module):
                 t2t_loss_weight=args.t2t_loss_weight,
             )
         elif self.ita_type == "clip_with_tempnet":
+            loss_ita = self.criterion(
+                image_features=image_feat,
+                text_features=text_feat,
+            )
+        elif self.ita_type == "dystress_loss":
             loss_ita = self.criterion(
                 image_features=image_feat,
                 text_features=text_feat,

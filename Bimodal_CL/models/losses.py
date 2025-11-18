@@ -2779,7 +2779,6 @@ class onlineCLR_Loss(nn.Module):
 
         return loss
 
-
 class Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss(nn.Module):
     def __init__(
         self,
@@ -3055,3 +3054,64 @@ class Scheduled_SogCLR_Crossmodal_With_Augmentation_Loss(nn.Module):
             )
 
         return total_loss
+
+class DySTreSS_Loss(nn.Module):
+    def __init__(self, world_size=8, tau_min=0.01, tau_max=0.1, dystress_mode='vanilla'):
+        super().__init__()
+        assert tau_max > tau_min > 0.0
+        self.world_size = world_size
+        self.tau_min = tau_min
+        self.tau_max = tau_max
+        self.dystress_mode = dystress_mode
+        print(f"DySTreSS mode: {self.dystress_mode}")
+
+    def _get_temp(self, s, tmin, tmax):
+        return tmin + 0.5 * (tmax - tmin) * (1.0 + torch.cos((1.0 + s) * torch.pi))
+
+    def _get_shifted_temp(self, s, tmin, tmax):
+        offset = -0.4
+        scale = 0.7
+
+        temp = torch.ones_like(s)
+        if offset <= 0:
+            temp[s <= -offset] = tmin + 0.5 * (tmax - tmin) * (1 + torch.cos((offset + s[s <= -offset]) * torch.pi / scale))
+            temp[s > -offset] = tmax
+        else:
+            temp[s >= -offset] = tmin + 0.5 * (tmax - tmin) * (1 + torch.cos((offset + s[s <= -offset]) * torch.pi / scale))
+            temp[s < -offset] = tmax
+            
+        return temp
+
+    def forward(self, image_features, text_features):
+        if self.world_size > 1:
+            image_features = torch.cat(GatherLayer.apply(image_features), dim=0)
+            text_features  = torch.cat(GatherLayer.apply(text_features),  dim=0)
+
+        N = image_features.shape[0]
+        labels = torch.arange(N, device=image_features.device)
+
+        t2i_sim = torch.einsum('id,jd->ij', text_features, image_features)
+        i2t_sim = t2i_sim.t()
+
+        if self.dystress_mode == 'shifted':
+            t2i_tau = self._get_shifted_temp(t2i_sim, self.tau_min, self.tau_max)
+            i2t_tau = self._get_shifted_temp(i2t_sim, self.tau_min, self.tau_max)
+        else:
+            t2i_tau = self._get_temp(t2i_sim, self.tau_min, self.tau_max)
+            i2t_tau = self._get_temp(i2t_sim, self.tau_min, self.tau_max)
+
+        t2i_loss = F.cross_entropy(t2i_sim / t2i_tau, labels)
+        i2t_loss = F.cross_entropy(i2t_sim / i2t_tau, labels)
+        loss = 0.5 * (t2i_loss + i2t_loss)
+
+        if utils.is_main_process():
+            wandb.log({
+                "train/tau_min": self.tau_min,
+                "train/tau_max": self.tau_max,
+                "train/tau_mean_pos_t2i": t2i_tau.diag().mean().item(),
+                "train/tau_mean_pos_i2t": i2t_tau.diag().mean().item(),
+                "train/t2i_loss": t2i_loss.item(),
+                "train/i2t_loss": i2t_loss.item(),
+            })
+
+        return loss

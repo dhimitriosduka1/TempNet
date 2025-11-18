@@ -1603,6 +1603,7 @@ def main(args):
         disable_t2t_temo_loss=args.disable_t2t_temo_loss,
         reversed_scheduler=args.reversed_scheduler,
         enable_non_modulated_unimodal_losses=args.enable_non_modulated_unimodal_losses,
+        dystress_mode=args.dystress_mode,
     )
 
     model = model.to(device)
@@ -2531,6 +2532,7 @@ if __name__ == "__main__":
             "scheduled_sogclr_crossmodal_with_augmentations",
             "scheduled_crossmodal_cosine_clip_with_augmentations_and_unimodal_loss",
             "sogclr_with_cosine_and_unimodal_loss",
+            "dystress_loss",
         ],
     )
     parser.add_argument("--vicreg_sim_coeff", default=25.0, type=float)
@@ -2645,6 +2647,9 @@ if __name__ == "__main__":
 
     # SimBasedCLIP loss params
     parser.add_argument("--sim_based_loss_alpha", default=0.1, type=float)
+
+    # DyStreSS mode
+    parser.add_argument("--dystress_mode", default="vanilla", choices=["vanilla", "shifted"])
 
     # For Scheduled_CLIP_Loss
     parser.add_argument(
